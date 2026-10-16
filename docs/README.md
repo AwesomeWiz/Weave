@@ -1,5 +1,7 @@
 # Weave — Shared Project Context Pack
 
+Current implementation: [repository setup](../README.md), [Phase 1 contract](PHASE1_IMPLEMENTATION.md), and [verification results](PHASE1_VERIFICATION.md). Phase 1 runs in explicitly labeled fixture mode; the real graph dependency remains teammate-owned.
+
 This folder is the recommended context pack for the shared ChatGPT Project **Weave — FalkorDB Graph Hacks**.
 
 > **Important:** These are pre-hackathon planning/reference notes. The official rules currently state that the main coding and design work must begin after the hackathon starts. Use these files to align on the idea and constraints; confirm/refine the implementation during the official build window.

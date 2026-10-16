@@ -82,8 +82,8 @@ The source screenshots do not identify their original font files. The following 
 | Role | Primary | Fallback | Weights | Usage |
 |---|---|---|---|---|
 | Interface / body | **Inter** | `system-ui, -apple-system, sans-serif` | 400, 500, 600, 700 | Everything operational: buttons, navigation, answers, citations, graph labels, cards, tables |
-| Display / editorial | **Instrument Serif** | `Georgia, 'Times New Roman', serif` | 400 | Weave wordmark, welcome statement, *select* page H1 headings |
-| IDs / code | **JetBrains Mono** | `ui-monospace, SFMono-Regular, monospace` | 400, 500 | Commit hashes, API identifiers, code snippets—not paragraphs |
+| Display / editorial | **Source Serif 4** | `Georgia, serif` | 500, 600 | Weave wordmark, personalized greeting, page H1 headings; optical sizing enabled |
+| IDs / code | **System monospace** | `ui-monospace, SFMono-Regular, Consolas, monospace` | 400 | Commit hashes, API identifiers, code snippets—not paragraphs |
 
 Use self-hosted or bundled `@fontsource` packages when practical; use proper font loading/fallback and avoid blocking the whole page on web-font download. **Do not distribute font files as part of the design handoff.**
 
@@ -91,8 +91,8 @@ Use self-hosted or bundled `@fontsource` packages when practical; use proper fon
 
 | Token | Font | Size / line height | Weight | Example |
 |---|---|---|---|---|
-| `display` | Instrument Serif | 52 / 1.06 | 400 | “Welcome to Weave” |
-| `h1` | Instrument Serif | 36 / 1.15 | 400 | Page title when editorial |
+| `display` | Source Serif 4 | 34–54 / 1.16 | 500 | Local-time greeting, optional preferred name |
+| `h1` | Source Serif 4 | 28–38 / 1.2 | 600 | Page title when editorial |
 | `h1-ui` | Inter | 30 / 1.23 | 600 | Graph and data-heavy views |
 | `h2` | Inter | 20 / 1.35 | 600 | Section headings |
 | `h3` | Inter | 16 / 1.4 | 600 | Card titles / panel headers |
@@ -100,7 +100,7 @@ Use self-hosted or bundled `@fontsource` packages when practical; use proper fon
 | `body-strong` | Inter | 14 / 1.55 | 600 | Answer leading claim / labels |
 | `small` | Inter | 12 / 1.5 | 400–500 | Metadata and helper text |
 | `caption` | Inter | 11 / 1.45 | 500 | Source type, graph relationships |
-| `mono` | JetBrains Mono | 12 / 1.5 | 400–500 | `PAY-42`, `8fae2`, `D-007` |
+| `mono` | System monospace | 12 / 1.5 | 400 | `PAY-42`, `8fae2`, `D-007` |
 
 - Do not mix serif and sans within one sentence.
 - The actual chat answer, entity names, relationship labels, source snippets, timestamps, inputs, and controls should always be in Inter.
@@ -637,7 +637,7 @@ These frontend types are **illustrative adapters**, not a replacement for `08_AP
 ### Brand and consistency
 
 - [ ] Same interwoven-knot SVG and wordmark on every page; no former EKOS symbol.
-- [ ] Inter for UI, Instrument Serif for selected display headings, JetBrains Mono for IDs.
+- [ ] Inter for UI, Source Serif 4 for display headings, system monospace for IDs.
 - [ ] One green active navigation row and a consistent sidebar order.
 - [ ] No ad hoc color hexes, uncontrolled radius variations, or unapproved decorative effects.
 - [ ] Consistent spacing, alignment, inspector width and button states.

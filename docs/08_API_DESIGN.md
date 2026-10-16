@@ -1,5 +1,7 @@
 # Weave — API Design
 
+> **Implemented Phase 1:** `GET /api/health` and `POST /api/query` now use the direct response contract. See [PHASE1_IMPLEMENTATION.md](PHASE1_IMPLEMENTATION.md) for exact health codes, additive mode/generation metadata, source fields, the teammate graph adapter boundary, and explicit development fixture mode. Other endpoints below remain proposed, not implemented.
+
 > **Pre-hackathon planning note:** This document is a planning/reference artifact only. The hackathon rules require the main coding and design work to begin after the event starts. Treat examples and proposed contracts here as hypotheses to confirm/refine during the official build window.
 
 **Backend:** FastAPI  

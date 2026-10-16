@@ -1,0 +1,358 @@
+{
+  "description": "EXPLICIT DEVELOPMENT FIXTURE. Synthetic application-integration data authorized for development; not retrieved from FalkorDB or live providers.",
+  "trace": {
+    "graph": {
+      "nodes": [
+        {
+          "id": "incident:INC-17",
+          "type": "Incident",
+          "label": "INC-17",
+          "properties": {
+            "title": "Payment timeouts",
+            "started_at": "2026-05-10T09:00:00Z",
+            "summary": "Payment requests timed out during peak traffic.",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "issue:PAY-42",
+          "type": "Issue",
+          "label": "PAY-42",
+          "properties": {
+            "title": "Reduce payment latency",
+            "created_at": "2026-05-11T09:00:00Z",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "message:payment-perf-7",
+          "type": "Message",
+          "label": "#payment-perf",
+          "properties": {
+            "title": "Payment performance discussion",
+            "timestamp": "2026-05-15T11:00:00Z",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "decision:D-007",
+          "type": "Decision",
+          "label": "D-007",
+          "properties": {
+            "title": "Introduce Redis caching",
+            "status": "accepted",
+            "decided_at": "2026-05-18T14:30:00Z",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "person:alice",
+          "type": "Person",
+          "label": "Alice Menon",
+          "properties": {
+            "role": "Payments tech lead",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "person:ravi",
+          "type": "Person",
+          "label": "Ravi Nair",
+          "properties": {
+            "role": "Payments engineer",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "doc:ADR-7",
+          "type": "Document",
+          "label": "ADR-7",
+          "properties": {
+            "title": "Redis caching decision",
+            "updated_at": "2026-05-20T12:00:00Z",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "commit:8fae2",
+          "type": "Commit",
+          "label": "8fae2",
+          "properties": {
+            "message": "Introduce Redis-backed cache",
+            "timestamp": "2026-05-19T10:00:00Z",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "repo:novapay/payments-api",
+          "type": "Repository",
+          "label": "novapay/payments-api",
+          "properties": {
+            "default_branch": "main",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "service:payment-service",
+          "type": "Service",
+          "label": "Payment Service",
+          "properties": {
+            "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+            "criticality": "High",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "tech:redis",
+          "type": "Technology",
+          "label": "Redis",
+          "properties": {
+            "category": "Cache",
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "service:checkout-service",
+          "type": "Service",
+          "label": "Checkout Service",
+          "properties": {
+            "description": "Checkout flow for NovaPay.",
+            "dataset": "development_fixture"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "incident:INC-17|LED_TO|issue:PAY-42",
+          "source": "incident:INC-17",
+          "type": "LED_TO",
+          "target": "issue:PAY-42",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "issue:PAY-42|LED_TO|decision:D-007",
+          "source": "issue:PAY-42",
+          "type": "LED_TO",
+          "target": "decision:D-007",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "issue:PAY-42|DISCUSSED_IN|message:payment-perf-7",
+          "source": "issue:PAY-42",
+          "type": "DISCUSSED_IN",
+          "target": "message:payment-perf-7",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "decision:D-007|DISCUSSED_IN|message:payment-perf-7",
+          "source": "decision:D-007",
+          "type": "DISCUSSED_IN",
+          "target": "message:payment-perf-7",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "decision:D-007|AFFECTS|service:payment-service",
+          "source": "decision:D-007",
+          "type": "AFFECTS",
+          "target": "service:payment-service",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "decision:D-007|INTRODUCES|tech:redis",
+          "source": "decision:D-007",
+          "type": "INTRODUCES",
+          "target": "tech:redis",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "person:alice|APPROVED|decision:D-007",
+          "source": "person:alice",
+          "type": "APPROVED",
+          "target": "decision:D-007",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "person:ravi|PARTICIPATED_IN|decision:D-007",
+          "source": "person:ravi",
+          "type": "PARTICIPATED_IN",
+          "target": "decision:D-007",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "decision:D-007|DOCUMENTED_IN|doc:ADR-7",
+          "source": "decision:D-007",
+          "type": "DOCUMENTED_IN",
+          "target": "doc:ADR-7",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "decision:D-007|IMPLEMENTED_BY|commit:8fae2",
+          "source": "decision:D-007",
+          "type": "IMPLEMENTED_BY",
+          "target": "commit:8fae2",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "commit:8fae2|BELONGS_TO|repo:novapay/payments-api",
+          "source": "commit:8fae2",
+          "type": "BELONGS_TO",
+          "target": "repo:novapay/payments-api",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "repo:novapay/payments-api|IMPLEMENTS|service:payment-service",
+          "source": "repo:novapay/payments-api",
+          "type": "IMPLEMENTS",
+          "target": "service:payment-service",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "service:payment-service|USES|tech:redis",
+          "source": "service:payment-service",
+          "type": "USES",
+          "target": "tech:redis",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        },
+        {
+          "id": "service:checkout-service|DEPENDS_ON|service:payment-service",
+          "source": "service:checkout-service",
+          "type": "DEPENDS_ON",
+          "target": "service:payment-service",
+          "properties": {
+            "dataset": "development_fixture"
+          }
+        }
+      ]
+    },
+    "source_ids": [
+      "incident:INC-17",
+      "issue:PAY-42",
+      "message:payment-perf-7",
+      "decision:D-007",
+      "doc:ADR-7",
+      "commit:8fae2"
+    ],
+    "decision_ids": [
+      "decision:D-007"
+    ],
+    "warnings": []
+  },
+  "sources": [
+    {
+      "id": "incident:INC-17",
+      "type": "Incident",
+      "title": "Payment timeouts",
+      "snippet": "Payment requests timed out during peak traffic. The incident prompted PAY-42 to investigate repeated read latency.",
+      "url": null,
+      "timestamp": "2026-05-10T09:00:00Z",
+      "entity_ids": [
+        "incident:INC-17"
+      ],
+      "metadata": {
+        "dataset": "development_fixture",
+        "synthetic": true
+      }
+    },
+    {
+      "id": "issue:PAY-42",
+      "type": "Issue",
+      "title": "Reduce payment latency",
+      "snippet": "Reduce payment latency under burst traffic. Investigate caching selected payment reads and idempotency data.",
+      "url": null,
+      "timestamp": "2026-05-11T09:00:00Z",
+      "entity_ids": [
+        "issue:PAY-42"
+      ],
+      "metadata": {
+        "dataset": "development_fixture",
+        "synthetic": true
+      }
+    },
+    {
+      "id": "message:payment-perf-7",
+      "type": "Message",
+      "title": "Payment performance discussion",
+      "snippet": "The payment performance discussion considered Redis for selected reads and idempotency data. Alice and Ravi participated in the decision discussion.",
+      "url": null,
+      "timestamp": "2026-05-15T11:00:00Z",
+      "entity_ids": [
+        "message:payment-perf-7"
+      ],
+      "metadata": {
+        "dataset": "development_fixture",
+        "synthetic": true
+      }
+    },
+    {
+      "id": "decision:D-007",
+      "type": "Decision",
+      "title": "Introduce Redis caching",
+      "snippet": "Redis was introduced in Payment Service to reduce repeated read latency during payment bursts and cache selected payment reads and idempotency data.",
+      "url": null,
+      "timestamp": "2026-05-18T14:30:00Z",
+      "entity_ids": [
+        "decision:D-007"
+      ],
+      "metadata": {
+        "dataset": "development_fixture",
+        "synthetic": true
+      }
+    },
+    {
+      "id": "doc:ADR-7",
+      "type": "Document",
+      "title": "Redis caching decision",
+      "snippet": "ADR-7 records the rationale and design for the Redis caching decision D-007, including selected payment reads and idempotency data.",
+      "url": null,
+      "timestamp": "2026-05-20T12:00:00Z",
+      "entity_ids": [
+        "doc:ADR-7"
+      ],
+      "metadata": {
+        "dataset": "development_fixture",
+        "synthetic": true
+      }
+    },
+    {
+      "id": "commit:8fae2",
+      "type": "Commit",
+      "title": "Introduce Redis-backed cache",
+      "snippet": "Introduce Redis-backed caching for selected payment reads and idempotency data in novapay/payments-api, implementing D-007.",
+      "url": null,
+      "timestamp": "2026-05-19T10:00:00Z",
+      "entity_ids": [
+        "commit:8fae2"
+      ],
+      "metadata": {
+        "dataset": "development_fixture",
+        "synthetic": true
+      }
+    }
+  ]
+}

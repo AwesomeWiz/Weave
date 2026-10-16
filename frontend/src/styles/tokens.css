@@ -1,0 +1,18 @@
+:root {
+  --font-display: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
+  --brand-900: #243f31; --brand-800: #315340; --brand-700: #446a52; --brand-600: #557b61;
+  --brand-100: #e8eee7; --brand-075: #f0f4ee;
+  --canvas: #f8f7f3; --sidebar: #f0f2ec; --inspector: #f2f4f3; --surface: #fff;
+  --surface-soft: #fcfcf9; --surface-hover: #f3f5f0; --surface-selected: #e4ece3;
+  --text-primary: #1d2420; --text-secondary: #53615a; --text-muted: #657169; --text-inverse: #fff; --text-link: #315a7c;
+  --border: #e2e6df; --border-strong: #cbd4c9; --focus-ring: #356b9b;
+  --success: #28734a; --success-bg: #e9f4eb; --warning: #936314; --warning-bg: #fff4dd; --danger: #a63f3f; --danger-bg: #fceaea;
+  --node-service: #385a46; --node-service-bg: #e5efe7; --node-person: #376caa; --node-person-bg: #e9f1fb;
+  --node-issue: #2766bc; --node-issue-bg: #e9f2ff; --node-incident: #b14944; --node-incident-bg: #fcebe9;
+  --node-decision: #a46a18; --node-decision-bg: #fff0d8; --node-technology: #a44542; --node-technology-bg: #f9e7e6;
+  --node-document: #7155a3; --node-document-bg: #f1ecfa; --node-repository: #644c87; --node-repository-bg: #f0ebf8;
+  --node-commit: #6b599a; --node-commit-bg: #f1edf8; --node-team: #486d66; --node-team-bg: #eaf2f0;
+  --nav-width: 256px; --inspector-width: 310px;
+  --radius-sm: 10px; --radius-md: 14px; --radius-lg: 18px; --radius-pill: 999px;
+  --shadow-card: 0 2px 12px rgb(27 45 33 / 3.5%);
+}
