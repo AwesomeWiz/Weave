@@ -195,6 +195,12 @@ class FalkorDBGraphAdapter(GraphAdapter):
         host: str | None = None,
         port: int | None = None,
         graph_name: str | None = None,
+        *,
+        username: str | None = None,
+        password: str | None = None,
+        ssl: bool = False,
+        socket_connect_timeout: float = 2,
+        socket_timeout: float = 5,
     ) -> None:
         try:
             from falkordb import FalkorDB as FalkorDBClient
@@ -208,8 +214,14 @@ class FalkorDBGraphAdapter(GraphAdapter):
         self._port = port or int(os.environ.get("FALKORDB_PORT", "6379"))
         self._graph_name = graph_name or os.environ.get("FALKORDB_GRAPH", "novapay")
 
-        self._client = FalkorDBClient(host=self._host, port=self._port)
+        self._client = FalkorDBClient(
+            host=self._host, port=self._port, username=username, password=password,
+            ssl=ssl, socket_connect_timeout=socket_connect_timeout, socket_timeout=socket_timeout,
+        )
         self._graph = self._client.select_graph(self._graph_name)
+
+    def close(self) -> None:
+        self._client.connection.close()
 
     def upsert_node(self, entity_type: str, canonical_id: str, properties: dict[str, Any]) -> None:
         if not canonical_id or not str(canonical_id).strip():
@@ -282,7 +294,7 @@ class FalkorDBGraphAdapter(GraphAdapter):
             "c.title AS title, c.text AS text, c.timestamp AS timestamp, c.url AS url "
             "ORDER BY c.chunk_index ASC"
         )
-        result = self._graph.query(query, {"source_ids": source_ids})
+        result = self._graph.ro_query(query, {"source_ids": source_ids}, timeout=5000)
         records: list[dict[str, Any]] = []
         if hasattr(result, "result_set") and result.result_set:
             cols = ["source_id", "rel_type", "id", "source_type", "chunk_index", "title", "text", "timestamp", "url"]

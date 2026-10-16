@@ -66,8 +66,10 @@ class FalkorGateway:
             try:
                 module, factory = settings.graph_factory.split(":", 1)
                 candidate = getattr(importlib.import_module(module), factory)(settings)
-                if not all(inspect.iscoroutinefunction(getattr(candidate, m, None))
-                           for m in ("health", "trace_decision", "find_sources")):
+                methods = ("health", "trace_decision") if settings.source_backend == "weave_data" else (
+                    "health", "trace_decision", "find_sources",
+                )
+                if not all(inspect.iscoroutinefunction(getattr(candidate, m, None)) for m in methods):
                     raise TypeError("Graph gateway must implement async protocol")
                 self.delegate = candidate
             except Exception:
@@ -122,6 +124,9 @@ class FalkorGateway:
             raise GraphContractError("Invalid trace result") from exc
 
     async def find_sources(self, source_ids: list[str]) -> list[Source]:
+        if self.settings.source_backend == "weave_data":
+            from .sources import WeaveDataSourceRetriever
+            return await WeaveDataSourceRetriever(self.settings).find_sources(source_ids)
         if not self.delegate:
             raise GraphUnavailable()
         try:

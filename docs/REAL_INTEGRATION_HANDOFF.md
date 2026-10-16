@@ -1,6 +1,33 @@
 # Real FalkorDB integration handoff
 
-Status: prepared, not verified against a real dataset. Antony's graph/tool and Alen's source/ingestion implementations are not present in the local checkout. Only `main` and `origin/main` refs were available during this review; remote branch availability was not checked. No teammate code, retrieval Cypher, or ingestion logic was implemented here.
+Status: Alen's `feature/data-ingestion-retrieval` was merged into `integration/phase1` at `26ae66a`. The actual package is now connected through the source boundary and verified offline. Antony's trace tool is still absent. Docker is not installed and the configured real database probe failed, so live ingestion/retrieval and full-query success remain unverified. Earlier preparation notes below are historical where superseded by this section.
+
+## Merged source integration — October 16
+
+Set `WEAVE_GRAPH_MODE=falkordb` and `WEAVE_SOURCE_BACKEND=weave_data`. Existing installations retain `delegate` as the source-backend default for compatibility; the example environment explicitly selects `weave_data`. Restart FastAPI after configuration changes. Run from the repository root so both `app` (via `--app-dir backend`) and the root-level `weave_data` package are importable. The existing backend requirements already include Pydantic and the FalkorDB driver.
+
+`backend/app/sources.py` constructs only `FalkorDBGraphAdapter`, passes configured host/port/graph/auth/TLS settings, and calls Alen's `find_sources(ids, adapter=adapter)` in a bounded worker thread. It never calls local loaders or constructs an in-memory adapter. Source reads use the existing parameterized provenance query via `ro_query`, with a 5-second graph timeout and bounded socket timeouts; the client closes after each retrieval. Errors retain the existing sanitized API handling.
+
+Alen's actual API accepts **canonical parent source IDs** and aggregates all contributing chunks into one `SourceRecord`. Therefore Antony's `TraceResult.source_ids` should contain `issue:PAY-42`, `message:payment-perf-7`, `commit:8fae2`, and `doc:ADR-7` for this retriever. Raw chunk IDs are not parent lookup IDs and are not silently rewritten. The backend preserves these parent IDs as citation IDs; `metadata.chunk_ids` and `metadata.chunks` preserve contributing IDs, parent IDs, source types, chunk indexes, titles, timestamps and URLs. Chunk text stays in the ordered aggregated snippet; existing Context Builder truncation and URL sanitation still apply. Additive `SourceRecord.timestamp` and `SourceRecord.chunks` fields prevent provenance from being discarded between Alen's retrieval and the API mapping. The public `/api/query` schema is unchanged.
+
+With this source backend, the graph factory needs async `health` and `trace_decision`; it need not implement a duplicate source retriever. With `WEAVE_SOURCE_BACKEND=delegate`, all three original methods remain required. Missing `trace_decision` still returns `GRAPH_UNAVAILABLE` even if source retrieval works independently. Fixture mode never constructs the real source adapter.
+
+**Grounding blocker:** the merged corpus has four text chunks (Issue, Message, Commit and Document), not a retrieved Decision rationale source. Their `FROM_*` links establish their parent source entities, not a source-to-D-007 rationale link. Do not relabel ADR-7 or fabricate a Decision source. Antony's trace must supply actual explicit rationale provenance compatible with the accepted-decision Context Builder, or the team must agree a small grounded mapping after inspecting his interface. Until then the tested trace double returns partial support and no fabricated current-use explanation. D-007's accepted status alone is insufficient.
+
+Ingestion now defaults to real FalkorDB. `python -m weave_data.ingest --host localhost --port 6379 --graph novapay` exits nonzero on failure; it does not silently write to memory. `--in-memory` explicitly selects an offline development run; `--prepare-only` performs no writes. CLI settings use `FALKORDB_*` or explicit flags, while FastAPI uses `WEAVE_FALKORDB_*` and `WEAVE_GRAPH_NAME`; configure both to target the same database.
+
+### Independent live source smoke
+
+This test does not require Antony's trace implementation. It creates a unique `weave_source_smoke_<uuid>` graph, runs **Alen's actual ingestion twice**, verifies stable counts, and retrieves all four canonical sources through a new backend source client. It compares text and provenance to the validated corpus, forbids local retrieval fallback, and deletes only its own test graph. It requires database write permission and is skipped by default:
+
+```powershell
+$env:PYTHONPATH = 'backend;.'
+$env:WEAVE_RUN_REAL_SOURCES = '1'
+.\.venv\Scripts\python.exe -m pytest backend\tests\test_real_sources.py -v
+Remove-Item Env:WEAVE_RUN_REAL_SOURCES
+```
+
+This test was **not run against a database** in this checkout: Docker was unavailable, no local 6379 listener was found, and the configured bounded read-only FalkorDB probe reported unavailable. No server installation or graph replacement was attempted. The full primary-query acceptance test described below remains separate and also skipped.
 
 ## Contract review
 
@@ -71,7 +98,7 @@ Set the real host, port, graph name and credentials in the ignored `.env` as doc
 | Blocker | Needed to resolve |
 | --- | --- |
 | Antony's interface unavailable | Branch/commit, module and function signature, returned types, canonical IDs, direction conventions, timeout/readiness behavior. Inspect actual code before writing the thin mapping. |
-| Alen's retrieval interface unavailable | Branch/commit, exact parent/chunk ID format, record schema, provenance fields, lookup semantics and seed/retrieval entry points. |
+| Alen's retrieval interface | Resolved by merge and offline adapter tests. Live verification still needs an available FalkorDB. |
 | Seeded runtime and independent expected evidence unavailable | Actual graph configuration, seed revision, authoritative source/chunk export for the primary trace. |
 
 When branches are available: inspect their interfaces and AGENTS instructions; add only the composition/normalization needed at the existing factory boundary; reconcile actual IDs with these documented contracts rather than guessing; run the full offline backend suite and frontend checks; run the opt-in test against their seeded database; repeat the primary browser workflow in real mode. Record commit/seed revisions, results and any remaining failures in `PHASE1_VERIFICATION.md`. Do not mark real integration complete from offline doubles, health alone, or skipped acceptance checks.

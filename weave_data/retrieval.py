@@ -8,6 +8,7 @@ structured evidence directly from dataset/graph chunks and canonical records.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 from pydantic import BaseModel, Field
@@ -43,6 +44,8 @@ class SourceRecord(BaseModel):
     snippet: str
     url: Optional[str] = None
     chunk_ids: list[str] = Field(default_factory=list)
+    timestamp: datetime | None = None
+    chunks: list[ChunkRecord] = Field(default_factory=list)
 
 
 def find_sources(
@@ -125,6 +128,8 @@ def find_sources(
                 snippet=snippet,
                 url=first_chunk.get("url"),
                 chunk_ids=chunk_ids,
+                timestamp=first_chunk.get("timestamp"),
+                chunks=[ChunkRecord.model_validate(c) for c in sorted_chunks],
             ))
         return results
 
@@ -187,6 +192,8 @@ def find_sources(
             snippet=snippet,
             url=url,
             chunk_ids=chunk_ids,
+            timestamp=sorted_chunks_local[0].timestamp if source_chunks_local else None,
+            chunks=sorted_chunks_local if source_chunks_local else [],
         ))
 
     return results

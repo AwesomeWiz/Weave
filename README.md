@@ -2,7 +2,7 @@
 
 Company decision intelligence: React → FastAPI → deterministic decision router → graph/source adapter → Context Builder → grounded explanation → sources and an interactive evidence graph.
 
-**Development mode works end to end using explicitly labeled synthetic fixtures. Real FalkorDB retrieval is waiting for the teammate-owned graph tool and dataset. It is not implemented or verified by this slice.** Real mode never falls back to fixtures.
+**Development mode works end to end using explicitly labeled synthetic fixtures. Alen's merged `weave_data` source retrieval is connected through the backend adapter, with offline verification. Live database verification and Antony's decision-trace tool remain pending.** Real mode never falls back to fixtures, local source files or an in-memory graph.
 
 ## Install
 
@@ -53,12 +53,13 @@ Set these in `.env` and restart FastAPI (clear any conflicting shell environment
 ```dotenv
 WEAVE_GRAPH_MODE=falkordb
 WEAVE_GRAPH_FACTORY=your_package.weave_adapter:create_gateway
+WEAVE_SOURCE_BACKEND=weave_data
 WEAVE_GRAPH_NAME=novapay
 WEAVE_FALKORDB_HOST=localhost
 WEAVE_FALKORDB_PORT=6379
 ```
 
-The factory must implement the typed async `GraphGateway` contract in [backend/app/graph.py](backend/app/graph.py). It owns actual `trace_decision`, source retrieval, and graph-tool health. Use the mapping example and schema in [docs/PHASE1_IMPLEMENTATION.md](docs/PHASE1_IMPLEMENTATION.md). No production seed or teammate Cypher was duplicated here.
+The factory provides actual async `trace_decision` and graph-tool health. With `WEAVE_SOURCE_BACKEND=weave_data`, the backend independently uses Alen's persisted source retrieval; with `delegate`, the factory also provides `find_sources`. See [the current integration handoff](docs/REAL_INTEGRATION_HANDOFF.md) for parent source IDs, chunk provenance, source-only smoke testing and remaining trace/rationale blockers. No teammate Cypher was duplicated here.
 
 Without that implementation, the primary query returns HTTP **503 / GRAPH_UNAVAILABLE**. Health separately checks actual FalkorDB graph availability and tool availability; a reachable database alone is insufficient. The health probe only uses `GRAPH.LIST` and a bounded read-only graph query.
 
@@ -78,7 +79,8 @@ Restart FastAPI. Health checks that the exact model is present. Generation uses 
 ## Verify
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend\tests -q
+$env:PYTHONPATH = 'backend;.'
+.\.venv\Scripts\python.exe -m pytest backend\tests tests -q --basetemp=.local/pytest-check
 .\.venv\Scripts\python.exe -m ruff check --config backend\pyproject.toml backend
 npm.cmd --prefix frontend test
 npm.cmd --prefix frontend run lint
@@ -187,9 +189,14 @@ python -m weave_data.ingest --prepare-only
 python -m weave_data.ingest --prepare-only --json
 ```
 
-**Full ingestion run (in-memory adapter fallback or FalkorDB if configured):**
+**Full ingestion run (FalkorDB required; failure exits nonzero):**
 ```bash
 python -m weave_data.ingest
+```
+
+**Explicit offline development run (no database persistence):**
+```bash
+python -m weave_data.ingest --in-memory
 ```
 
 **Connect to FalkorDB:**

@@ -18,7 +18,6 @@ All steps are independently testable.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -72,8 +71,8 @@ def run_ingestion(
     data_dir:
         Path to the NovaPay data directory.  Defaults to ``data/novapay/``.
     adapter:
-        Graph persistence adapter.  If None, attempts FalkorDB, falls back
-        to InMemoryGraphAdapter.
+        Graph persistence adapter. If None, uses FalkorDB. In-memory persistence
+        must be explicitly supplied; database failure never selects it.
 
     Returns
     -------
@@ -119,10 +118,9 @@ def run_ingestion(
     # ------------------------------------------------------------------
     # 5. Persist
     # ------------------------------------------------------------------
-    if adapter is None:
-        adapter = _create_adapter()
-
     try:
+        if adapter is None:
+            adapter = _create_adapter()
         _persist_nodes(adapter, records)
         result.nodes_created_or_updated = len(records)
 
@@ -148,22 +146,20 @@ def _create_adapter(
     host: str | None = None,
     port: int | None = None,
     graph_name: str | None = None,
+    *,
+    in_memory: bool = False,
 ) -> GraphAdapter:
-    """Try FalkorDB, fall back to in-memory."""
-    effective_host = host or os.environ.get("FALKORDB_HOST")
-    if effective_host:
-        try:
-            return FalkorDBGraphAdapter(host=effective_host, port=port, graph_name=graph_name)
-        except Exception:
-            pass
-    return InMemoryGraphAdapter()
+    """Memory is explicit. Configuration and connection failures propagate."""
+    if in_memory:
+        return InMemoryGraphAdapter()
+    return FalkorDBGraphAdapter(host=host, port=port, graph_name=graph_name)
 
 
 def _persist_nodes(adapter: GraphAdapter, records: list[BaseRecord]) -> None:
     for rec in records:
         props = rec.model_dump(mode="json")
         # Remove meta fields that are part of the schema, not node properties
-        entity_type = props.pop("entity_type", rec.entity_type.value)
+        props.pop("entity_type", None)
         props.pop("source", None)
         # Convert datetime objects to ISO strings
         for key, val in list(props.items()):
@@ -221,11 +217,14 @@ def prepare_ingestion(
 def main() -> int:
     import argparse
     import json
-    import sys
 
     parser = argparse.ArgumentParser(
         prog="weave_data.ingest",
         description="Weave — Data & Ingestion pipeline for FalkorDB Company Brain",
+    )
+    parser.add_argument(
+        "--in-memory", action="store_true",
+        help="Explicit offline development run; does not persist to FalkorDB",
     )
     parser.add_argument(
         "--data-dir",
@@ -292,11 +291,18 @@ def main() -> int:
         return 0 if validation.ok else 1
 
     # Full ingestion run
-    adapter = _create_adapter(host=args.host, port=args.port, graph_name=args.graph)
-    result = run_ingestion(data_dir=args.data_dir, adapter=adapter)
+    adapter = None
+    try:
+        adapter = _create_adapter(host=args.host, port=args.port, graph_name=args.graph,
+                                  in_memory=args.in_memory)
+        result = run_ingestion(data_dir=args.data_dir, adapter=adapter)
+    except Exception:
+        result = IngestionResult(status="failed", errors=[
+            "FalkorDB adapter unavailable. Check database configuration; no in-memory fallback was used."
+        ])
 
     if args.json:
-        print(json.dumps(result.to_dict(), indent=2))
+        print(json.dumps({**result.to_dict(), "persistence": type(adapter).__name__ if adapter else "unavailable"}, indent=2))
     else:
         print("=" * 60)
         print(" Weave Ingestion Pipeline - Full Run")
@@ -309,7 +315,7 @@ def main() -> int:
             print("Errors:")
             for err in result.errors:
                 print(f"  - {err}")
-        print(f"Persistence:   {type(adapter).__name__}")
+        print(f"Persistence:   {type(adapter).__name__ if adapter else 'unavailable'}")
         print("=" * 60)
 
     return 0 if result.status == "success" else 1

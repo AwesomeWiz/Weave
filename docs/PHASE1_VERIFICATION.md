@@ -6,7 +6,7 @@ The later frontend refinement is documented in [UI_REFINEMENT_VERIFICATION.md](U
 
 | Check | Result |
 | --- | --- |
-| Backend pytest | 49 passed; 1 real integration test skipped |
+| Backend/ingestion pytest | 147 passed; 2 real integration tests skipped after Alen integration |
 | Backend Ruff | Passed |
 | Frontend Vitest | 41 passed after UI refinement; see linked report |
 | Frontend ESLint | Passed |
@@ -24,6 +24,16 @@ Backend tests cover input validation, canonical IDs and envelope shape, fixture 
 Frontend tests cover network and API errors, unreadable/malformed responses, health 503 handling, URL safety, Enter submission, Shift+Enter, disabled/loading state, retry, and citation inspection. Component tests stub the canvas; the real React Flow renderer was exercised separately in the browser.
 
 ## October 16 integration regressions
+
+### Alen merged package integration (latest)
+
+Verified merge `26ae66a` on `integration/phase1` with a clean starting worktree. Baseline: 137 backend/ingestion tests passed, one real test skipped; 41 frontend tests passed. The initial test run hit Windows temp-directory permissions; using a workspace-owned `--basetemp` resolved that without changing application behavior.
+
+The source boundary now consumes Alen's actual graph-backed `find_sources` and `FalkorDBGraphAdapter`. Ten additional offline cases cover the four canonical sources, multi-chunk provenance/order, source failure without fallback, public HTTP shape and sanitized failures, explicit ingestion CLI failure/memory behavior, fixture isolation, and read-only parameterized client configuration. Test graph doubles are explicitly offline; no source query/Cypher or ingestion implementation was duplicated. All prior citation, decision-status, health and error regressions continue to pass.
+
+Latest full Python result: **147 passed, 2 skipped**. Backend plus changed package-file Ruff checks passed. Frontend remained unchanged: **41 tests passed**, ESLint, TypeScript and production build passed.
+
+The two skipped tests cover (1) full seeded primary query through Antony's missing trace tool and (2) independent real ingestion/retrieval using a unique test graph. Docker is not installed, no local port 6379 listener was found, and the configured real database probe returned unavailable. An actual source package HTTP test correctly returns partial evidence because there is no retrieved rationale source explicitly linked to accepted D-007. [Current configuration, provenance mapping and blockers](REAL_INTEGRATION_HANDOFF.md) document the distinction. No successful live-database or full GraphRAG workflow is claimed.
 
 Five new backend regressions failed before the fixes and now pass: source-native IDs differing from graph IDs, proposed decisions incorrectly explaining current use, failed LLM health probes incorrectly marking the graph unavailable, malformed trace payloads, and malformed source payloads. Two additional HTTP cases confirm malformed adapter output returns a sanitized 502 `GRAPH_CONTRACT_ERROR` without leaking payload details.
 
@@ -58,7 +68,7 @@ Local QA screenshots are in the ignored `.local/` directory, including `weave-we
 
 ## Remaining verification limits
 
-- **Real FalkorDB success is blocked on the teammate-owned trace tool, source retriever, and seeded NovaPay graph.** Enable `WEAVE_RUN_REAL_INTEGRATION=1` only after configuring that integration, then repeat the browser acceptance question in real mode.
+- **Real FalkorDB success is blocked on database availability, Antony's trace tool and explicit decision-rationale provenance.** Alen's source retriever is integrated and verified offline. Use `WEAVE_RUN_REAL_SOURCES=1` for the independent ingestion/source smoke once a database is available; use `WEAVE_RUN_REAL_INTEGRATION=1` only after completing the trace integration, then repeat the browser acceptance question in real mode.
 - Ollama `/api/tags` responded with an empty model list. No Qwen model was installed or downloaded. Actual LLM generation was not verified; the provider protocol, mocked success/validation and failure fallback were tested.
 - A non-failing upstream Starlette warning reports that its current test client is deprecating `httpx` in favor of `httpx2`. The pinned development environment passes its tests.
 - No deployment, authentication, production connectors, persistent conversations, expert finder, impact analysis, or freshness implementation is included.
