@@ -1,0 +1,18 @@
+[
+  {
+    "id": "issue:PAY-42",
+    "source": "jira",
+    "entity_type": "Issue",
+    "key": "PAY-42",
+    "title": "Reduce payment latency under burst traffic",
+    "description": "During the INC-17 incident on May 10, Payment Service experienced request timeouts due to excessive database read latency under concurrent burst load. Approximately 12% of payment transactions failed during the 11:00–11:45 UTC peak window.\n\nInvestigation shows that repeated reads of idempotency keys and payment configuration data from PostgreSQL account for 70% of query volume during bursts. These values change infrequently and are strong candidates for caching.\n\nProposed approach:\n- Introduce an in-memory or Redis-backed cache for hot-read paths\n- Measure cache-hit ratio and p99 latency improvement\n- Validate that cache invalidation does not introduce stale-payment risks\n\nAcceptance criteria:\n- p99 payment latency < 200ms during simulated burst traffic\n- Cache-hit ratio > 80% for idempotency key lookups\n- No increase in payment inconsistency errors",
+    "status": "Done",
+    "priority": "High",
+    "created_at": "2026-05-11T09:00:00Z",
+    "resolved_at": "2026-05-20T16:00:00Z",
+    "assignee": "person:ravi",
+    "affected_services": ["service:payment-service"],
+    "related_incidents": ["incident:INC-17"],
+    "url": "https://jira.novapay.example/browse/PAY-42"
+  }
+]
