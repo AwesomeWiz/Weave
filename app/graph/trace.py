@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.graph.client import GraphClient
+from .client import GraphClient
 
 
 def trace_decision(

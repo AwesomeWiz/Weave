@@ -1,4 +1,24 @@
-# Phase 1 verification — October 16, 2026
+# Phase 1 verification — October 17, 2026
+
+## Latest trace merge and selective stash reconciliation
+
+Reviewed merge `2c05fc0` / Antony's `d3441b8` and all tracked/untracked contents listed in `stash@{0}` before editing. The restored integration adapter, compatibility namespace and tests were retained. Only compatible client/configuration/import changes were reapplied; the older stashed trace and outdated documentation were not restored. The stash remains intact.
+
+The baseline stopped at four **import/collection errors**: absolute `app.graph.*` imports collided with FastAPI's `app.graph` gateway module. Relative imports within the teammate package and `weave_graph.trace` in external tests resolve that collision through the existing compatibility namespace. The client auth/TLS/timeouts/close options expected by the adapter were selectively restored. The adapter now preserves Antony's returned warnings, including missing-path and chunk-provenance warnings. The old database test double was updated to answer the new USES/LED_TO queries rather than replacing those queries with older code.
+
+Latest result: **166 Python tests passed, two opt-in real database tests skipped**; Ruff passed. This includes Antony's latest strengthened smoke assertions executed with an explicit offline database double. AST comparison confirmed that the complete `trace_decision` and teammate smoke `main` function bodies match the latest merged HEAD: query code, USES, LED_TO, SUPPORTED_BY, provenance retrieval and smoke assertions are unchanged. Only their imports differ.
+
+No import or adapter contract test failures remain. No actual FalkorDB query failure has been established: live query execution remains **unverified**, because the current configured `novapay` database probe returned unavailable. The offline API still reports partial support because retrieved sources lack the explicit source-to-Decision rationale linkage required by the unchanged Context Builder. This is a grounding/provenance limitation, not an import failure or a proven database-query error. Public API and grounding safeguards were not modified.
+
+Reproduce from the repository root in PowerShell:
+
+```powershell
+$env:PYTHONPATH = 'backend;.'
+.\.venv\Scripts\python.exe -m pytest backend\tests tests app\graph -q --basetemp=.local/pytest-restored-check
+.\.venv\Scripts\python.exe -m ruff check --config backend\pyproject.toml backend app\graph weave_graph tests\test_decision_trace.py
+```
+
+Older dated verification notes below retain their original context.
 
 The later frontend refinement is documented in [UI_REFINEMENT_VERIFICATION.md](UI_REFINEMENT_VERIFICATION.md), including updated browser checks, personalization, collapsible panels and viewport scrolling. Earlier browser notes below describe the original Phase 1 layout.
 
@@ -6,7 +26,7 @@ The later frontend refinement is documented in [UI_REFINEMENT_VERIFICATION.md](U
 
 | Check | Result |
 | --- | --- |
-| Backend/ingestion pytest | 147 passed; 2 real integration tests skipped after Alen integration |
+| Backend/ingestion/graph pytest | 166 passed; 2 real database tests skipped after latest trace reconciliation |
 | Backend Ruff | Passed |
 | Frontend Vitest | 41 passed after UI refinement; see linked report |
 | Frontend ESLint | Passed |

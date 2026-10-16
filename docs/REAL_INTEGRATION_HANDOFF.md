@@ -1,6 +1,8 @@
 # Real FalkorDB integration handoff
 
-Status: Alen's `feature/data-ingestion-retrieval` was merged into `integration/phase1` at `26ae66a`. The actual package is now connected through the source boundary and verified offline. Antony's trace tool is still absent. Docker is not installed and the configured real database probe failed, so live ingestion/retrieval and full-query success remain unverified. Earlier preparation notes below are historical where superseded by this section.
+Current status (October 17): Antony's latest Decision Trace update is merged at `2c05fc0` (`d3441b8`). Restored integration files are reconciled through the existing `weave_graph` namespace. Use `WEAVE_GRAPH_FACTORY=app.antony:create_gateway`, `WEAVE_SOURCE_BACKEND=weave_data`, `WEAVE_GRAPH_MODE=falkordb` and `WEAVE_GRAPH_NAME=novapay`. The latest returned USES, LED_TO, SUPPORTED_BY and chunk provenance paths are preserved; all trace query bodies match merged HEAD. The adapter preserves upstream warnings. Client configuration compatibility was selectively reapplied after reviewing the stash; its older trace and obsolete status documents were not restored, and the stash remains intact.
+
+Verification: 166 Python tests passed, two real database tests skipped; Ruff passed. Initial failures were import collisions, followed by stale adapter-test/client compatibility requirements, all resolved. No remaining offline import or adapter contract failures were found. Actual FalkorDB query execution remains unverified because the configured database probe is unavailable. The offline integrated response remains partial due to missing explicit retrieved source-to-Decision rationale linkage under the unchanged Context Builder. See [latest verification and commands](PHASE1_VERIFICATION.md). Older source-integration/preparation notes below are historical where superseded by this status.
 
 ## Merged source integration — October 16
 

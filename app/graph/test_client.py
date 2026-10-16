@@ -1,4 +1,4 @@
-from app.graph.client import GraphClient
+from .client import GraphClient
 
 
 def main():

@@ -1,7 +1,7 @@
 import json
 
-from app.graph.client import GraphClient
-from app.graph.trace import trace_decision
+from .client import GraphClient
+from .trace import trace_decision
 
 
 def main() -> None:

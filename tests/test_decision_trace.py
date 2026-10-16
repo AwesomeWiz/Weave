@@ -1,4 +1,4 @@
-from app.graph.trace import trace_decision
+from weave_graph.trace import trace_decision
 
 
 def test_trace_decision_missing_service_returns_warning():
