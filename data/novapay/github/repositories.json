@@ -1,0 +1,11 @@
+[
+  {
+    "id": "repo:novapay/payments-api",
+    "source": "github",
+    "entity_type": "Repository",
+    "name": "novapay/payments-api",
+    "url": "https://github.novapay.example/novapay/payments-api",
+    "default_branch": "main",
+    "service": "service:payment-service"
+  }
+]

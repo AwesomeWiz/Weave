@@ -1,0 +1,15 @@
+[
+  {
+    "id": "incident:INC-17",
+    "source": "pagerduty",
+    "entity_type": "Incident",
+    "title": "Payment requests timing out during peak traffic",
+    "severity": "high",
+    "summary": "Multiple payment API endpoints returned HTTP 504 Gateway Timeout errors during the 11:00–11:45 UTC burst window on May 10. Approximately 12% of transactions failed. Root cause traced to excessive database read latency under concurrent burst load in Payment Service. No data loss confirmed.",
+    "started_at": "2026-05-10T11:00:00Z",
+    "resolved_at": "2026-05-10T13:30:00Z",
+    "affected_services": ["service:payment-service"],
+    "related_issues": ["issue:PAY-42"],
+    "url": "https://incidents.novapay.example/INC-17"
+  }
+]
