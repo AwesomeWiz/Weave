@@ -1,0 +1,18 @@
+[
+  {
+    "id": "team:payments",
+    "source": "hr",
+    "entity_type": "Team",
+    "name": "Payments",
+    "members": ["person:alice", "person:ravi"],
+    "owns_services": ["service:payment-service"]
+  },
+  {
+    "id": "team:platform",
+    "source": "hr",
+    "entity_type": "Team",
+    "name": "Platform",
+    "members": ["person:maya"],
+    "owns_services": []
+  }
+]

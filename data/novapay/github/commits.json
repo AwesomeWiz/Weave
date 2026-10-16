@@ -1,0 +1,17 @@
+[
+  {
+    "id": "commit:8fae2",
+    "source": "github",
+    "entity_type": "Commit",
+    "sha": "8fae2d4a1b3c5e6f7890abcdef1234567890abcd",
+    "message": "feat: introduce Redis-backed caching for payment reads\n\nAdd RedisCache adapter to Payment Service. Frequently-read payment\nconfiguration and idempotency keys are now served from Redis, reducing\ndirect PostgreSQL queries during burst traffic by ~60%.\n\nCloses PAY-42\nImplements Decision D-007\nSee ADR-7 for architectural rationale.",
+    "timestamp": "2026-05-19T10:15:00Z",
+    "author": "person:ravi",
+    "repository": "repo:novapay/payments-api",
+    "changes": ["service:payment-service"],
+    "implements_decision": ["decision:D-007"],
+    "addresses": ["issue:PAY-42"],
+    "architecture_change": true,
+    "url": "https://github.novapay.example/novapay/payments-api/commit/8fae2d4"
+  }
+]

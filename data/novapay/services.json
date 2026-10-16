@@ -1,0 +1,22 @@
+[
+  {
+    "id": "service:payment-service",
+    "source": "service-catalog",
+    "entity_type": "Service",
+    "name": "Payment Service",
+    "description": "Core payment processing service handling transaction authorization, capture, and settlement.",
+    "criticality": "high",
+    "technologies": ["tech:redis"],
+    "depends_on": []
+  },
+  {
+    "id": "service:checkout-service",
+    "source": "service-catalog",
+    "entity_type": "Service",
+    "name": "Checkout Service",
+    "description": "Customer-facing checkout flow that orchestrates cart, pricing, and payment submission.",
+    "criticality": "high",
+    "technologies": [],
+    "depends_on": ["service:payment-service"]
+  }
+]

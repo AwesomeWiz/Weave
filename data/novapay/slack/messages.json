@@ -1,0 +1,13 @@
+[
+  {
+    "id": "message:payment-perf-7",
+    "source": "slack",
+    "entity_type": "Message",
+    "channel": "#payments-engineering",
+    "thread_id": "payment-perf-2026-05",
+    "text": "Thread: Payment Service latency improvements\n\n[2026-05-15 10:00 UTC] Alice Menon: After INC-17 I reviewed the slow-query logs. The majority of burst-window reads are idempotency key lookups and payment config fetches — both are read-heavy and change infrequently. We should cache them.\n\n[2026-05-15 10:12 UTC] Ravi Nair: Agreed. I ran a local benchmark with Redis sitting in front of Postgres for those paths. p99 dropped from 380ms to 45ms at 500 concurrent requests. Cache-hit ratio was 87% with a 60-second TTL.\n\n[2026-05-16 09:30 UTC] Maya Joseph: From a platform perspective Redis is already in our infrastructure stack for session management. We can reuse the existing cluster — no new provisioning needed.\n\n[2026-05-17 14:00 UTC] Alice Menon: Let's go ahead. I'll write up ADR-7 and Ravi can start the implementation against PAY-42. We'll target a 60-second TTL with explicit invalidation on config writes.",
+    "timestamp": "2026-05-15T10:00:00Z",
+    "participants": ["person:alice", "person:ravi", "person:maya"],
+    "url": "https://slack.novapay.example/archives/payments-engineering/payment-perf-2026-05"
+  }
+]

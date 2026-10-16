@@ -1,0 +1,19 @@
+{
+  "payment service": "service:payment-service",
+  "payments service": "service:payment-service",
+  "payments api": "service:payment-service",
+  "payment-service": "service:payment-service",
+  "checkout service": "service:checkout-service",
+  "checkout-service": "service:checkout-service",
+  "redis": "tech:redis",
+  "redis cache": "tech:redis",
+  "alice": "person:alice",
+  "alice menon": "person:alice",
+  "ravi": "person:ravi",
+  "ravi nair": "person:ravi",
+  "maya": "person:maya",
+  "maya joseph": "person:maya",
+  "payments team": "team:payments",
+  "payments-api": "repo:novapay/payments-api",
+  "novapay/payments-api": "repo:novapay/payments-api"
+}
