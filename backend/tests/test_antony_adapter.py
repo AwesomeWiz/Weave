@@ -98,7 +98,7 @@ def test_actual_trace_normalization_and_canonical_inputs(merged_database, query)
     assert len(calls) == len(closed) == 1
 
 
-def test_complete_merged_offline_api_path_preserves_partial_evidence(merged_database):
+def test_complete_merged_offline_api_path_recognizes_supported_provenance(merged_database):
     config = Settings(graph_mode="falkordb", graph_factory="app.antony:create_gateway",
                       source_backend="weave_data", llm_provider="none")
     with TestClient(create_app(config)) as client:
@@ -107,22 +107,48 @@ def test_complete_merged_offline_api_path_preserves_partial_evidence(merged_data
     data = response.json()
     assert set(data) == {"answer", "support_status", "tools_used", "sources", "graph", "metadata"}
     assert data["tools_used"] == ["trace_decision"]
-    assert data["support_status"] == "partially_supported"
+    assert data["support_status"] == "supported"
     assert {s["id"] for s in data["sources"]} == IDS
     assert all(s["metadata"]["chunk_ids"] and s["timestamp"] for s in data["sources"])
     assert any("latency" in s["snippet"].lower() for s in data["sources"])
-    assert "rationale is incomplete" in data["answer"]
+    assert "[issue:PAY-42]" in data["answer"]
+    assert "[decision:D-007]" not in data["answer"]
 
 
 def test_do_not_turn_decision_summary_into_a_fabricated_source(merged_database):
     gateway = AntonyGateway(Settings(graph_mode="falkordb"))
     trace = asyncio.run(gateway.trace_decision(TARGET))
     sources = asyncio.run(gateway.find_sources(trace.source_ids))
-    # The updated tool returns genuine USES; it cannot supply missing rationale provenance.
+    before = trace.model_dump()
+    # The retrieved multi-hop path supplies provenance without a synthetic Decision source.
     assert any(e.type == "USES" for e in trace.graph.edges)
     context = build_context(trace, sources, TARGET)
-    assert context.status == "partially_supported" and not context.can_explain
+    assert context.status == "supported" and context.can_explain
     assert all(s.id != "decision:D-007" for s in sources)
+    assert context.graph.model_dump() == trace.graph.model_dump() == before["graph"]
+    assert "[decision:D-007]" not in context.summary
+
+
+def test_retrieved_message_path_can_ground_rationale_without_issue_path(merged_database):
+    gateway = AntonyGateway(Settings(graph_mode="falkordb"))
+    trace = asyncio.run(gateway.trace_decision(TARGET))
+    sources = asyncio.run(gateway.find_sources(trace.source_ids))
+    trace.graph.edges = [e for e in trace.graph.edges
+                         if not (e.type == "SUPPORTED_BY" and e.target == "issue:PAY-42")]
+    context = build_context(trace, sources, TARGET)
+    assert context.status == "supported" and context.can_explain
+    assert "[message:payment-perf-7]" in context.summary
+
+
+@pytest.mark.parametrize("missing", ["decision_support", "chunk_provenance"])
+def test_actual_pipeline_cannot_ground_rationale_without_retrieved_path(merged_database, missing):
+    gateway = AntonyGateway(Settings(graph_mode="falkordb"))
+    trace = asyncio.run(gateway.trace_decision(TARGET))
+    sources = asyncio.run(gateway.find_sources(trace.source_ids))
+    kinds = {"SUPPORTED_BY"} if missing == "decision_support" else {"FROM_ISSUE", "FROM_MESSAGE"}
+    trace.graph.edges = [e for e in trace.graph.edges if e.type not in kinds]
+    context = build_context(trace, sources, TARGET)
+    assert context.status == "partially_supported" and not context.can_explain
 
 
 def test_missing_decision_is_insufficient_without_sources():

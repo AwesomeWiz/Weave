@@ -1,5 +1,17 @@
 # Phase 1 verification — October 17, 2026
 
+## Retrieved rationale provenance — latest verification
+
+The offline primary query now returns **supported** using the actual merged trace and Alen retrieval functions with explicit database doubles. No live FalkorDB verification was attempted or claimed. Latest Python result: **185 passed, two real database tests skipped**; Ruff passed. The pre-existing Starlette test-client warning remains non-failing. Frontend code was unchanged and its checks were not repeated in this backend-only pass.
+
+The provenance was not lost in normalization or retrieval. Antony's graph preserves `D-007 SUPPORTED_BY issue:PAY-42` / `message:payment-perf-7` and the corresponding `Chunk FROM_* Source` edges. Alen's `SourceRecord` and backend source wrapper preserve parent citation IDs, contributing chunk IDs, timestamps and chunk metadata. Context Builder's `by_entity` / `source_for` lookup previously recognized only direct source-to-Decision linkage, then required `decision.id in source_for`; that excluded this complete multi-hop path.
+
+The focused fix is confined to `backend/app/context.py`: derive an internal rationale source lookup for accepted decisions with the existing service/technology relationships, using only returned SUPPORTED_BY and correctly directed, typed FROM_* paths. It verifies all contributing chunks' canonical parent/type/index/text against the retrieved source and its ordered excerpt. Existing direct-source behavior remains supported. It changes no graph nodes/edges, source IDs, `entity_ids`, teammate queries, API schema, LLM prompt/provider or citation validator. The explanation uses retrieved source text with its actual Issue/Message citation, not the Decision summary relabeled as a source.
+
+New regressions first reproduced the bug: the two valid-path cases failed as partial before the context fix, while all missing-path cases were already rejected. Sixteen focused provenance cases now cover complete paths, missing/reversed/wrong-type relationships, wrong chunk IDs/parent/text/snippet, nonaccepted status, absent USES/AFFECTS/INTRODUCES, multi-chunk ordering/truncation and missing contributing chunks. Three further merged-pipeline cases verify Message-only support and removal of decision-support or chunk-provenance paths. Two earlier partial-result assertions now correctly expect supported evidence while retaining checks against synthetic Decision citations and graph mutation. The older source-only test double without Chunk nodes/edges still returns partial support, as required.
+
+The existing `weave_graph` namespace, graph/source adapters and teammate Cypher were not modified. The stash remains intact. Earlier dated partial-support findings below describe the state before this context fix.
+
 ## Latest trace merge and selective stash reconciliation
 
 Reviewed merge `2c05fc0` / Antony's `d3441b8` and all tracked/untracked contents listed in `stash@{0}` before editing. The restored integration adapter, compatibility namespace and tests were retained. Only compatible client/configuration/import changes were reapplied; the older stashed trace and outdated documentation were not restored. The stash remains intact.
@@ -26,7 +38,7 @@ The later frontend refinement is documented in [UI_REFINEMENT_VERIFICATION.md](U
 
 | Check | Result |
 | --- | --- |
-| Backend/ingestion/graph pytest | 166 passed; 2 real database tests skipped after latest trace reconciliation |
+| Backend/ingestion/graph pytest | 185 passed; 2 real database tests skipped after rationale provenance fix |
 | Backend Ruff | Passed |
 | Frontend Vitest | 41 passed after UI refinement; see linked report |
 | Frontend ESLint | Passed |

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from .graph import GraphContractError
-from .models import EvidenceGraph, Source, SupportStatus, TraceInput, TraceResult
+from .models import EvidenceGraph, GraphNode, Source, SupportStatus, TraceInput, TraceResult
 
 
 def safe_url(url: str | None) -> str | None:
@@ -41,6 +41,35 @@ class EvidenceContext:
             "support_status": self.status,
             "grounded_summary": self.summary,
         }, ensure_ascii=False)
+
+
+def _retrieved_chunk_path(source: Source, parent: GraphNode, nodes: dict[str, GraphNode],
+                          relations: set[tuple[str, str, str]]) -> bool:
+    """Verify the cited aggregate against its returned Chunk -> Source evidence."""
+    relationship = {"Issue": "FROM_ISSUE", "Message": "FROM_MESSAGE"}.get(parent.type)
+    chunk_ids = source.metadata.get("chunk_ids")
+    if (not relationship or source.type != parent.type
+            or source.metadata.get("source_id") != parent.id
+            or source.metadata.get("source_type") != parent.type
+            or not isinstance(chunk_ids, list) or not chunk_ids
+            or any(not isinstance(id, str) for id in chunk_ids)
+            or len(set(chunk_ids)) != len(chunk_ids)):
+        return False
+    chunks = []
+    for chunk_id in chunk_ids:
+        chunk = nodes.get(chunk_id)
+        if (chunk is None or chunk.type != "Chunk"
+                or (chunk_id, relationship, parent.id) not in relations):
+            return False
+        props = chunk.properties
+        if (props.get("source_id") != parent.id or props.get("source_type") != parent.type
+                or type(props.get("chunk_index")) is not int or props["chunk_index"] < 0
+                or not isinstance(props.get("text"), str) or not props["text"].strip()):
+            return False
+        chunks.append(chunk)
+    chunks.sort(key=lambda chunk: (chunk.properties["chunk_index"], chunk.id))
+    excerpt = "\n\n".join(chunk.properties["text"].strip() for chunk in chunks)
+    return excerpt[:1600] == source.snippet
 
 
 def build_context(trace: TraceResult, records: list[Source], query: TraceInput) -> EvidenceContext:
@@ -106,6 +135,18 @@ def build_context(trace: TraceResult, records: list[Source], query: TraceInput) 
         (s, "USES", t) in relations and (d.id, "AFFECTS", s) in relations
         and (d.id, "INTRODUCES", t) in relations for s in services for t in technologies
     )]
+    # A Decision need not be a text source itself. Recognize only the retrieved
+    # Decision -SUPPORTED_BY-> Issue/Message <-FROM_*- Chunk path, with matching
+    # source/chunk IDs and text. Keep the real parent-source citation unchanged.
+    for decision in direct:
+        if decision.id in source_for or decision.properties.get("status") != "accepted":
+            continue
+        candidates = [source for edge in graph.edges
+                      if edge.source == decision.id and edge.type == "SUPPORTED_BY"
+                      for source in by_entity.get(edge.target, [])
+                      if _retrieved_chunk_path(source, nodes[edge.target], nodes, relations)]
+        if candidates:
+            source_for[decision.id] = min(candidates, key=lambda source: source.id)
     source_entities = {i for s in sources.values() for i in [s.id, *s.entity_ids]}
     rationale = [d for d in direct if d.id in source_for
                  and d.properties.get("status") == "accepted"]
