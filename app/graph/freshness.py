@@ -105,7 +105,9 @@ def find_stale_knowledge(client: GraphClient, entity: str) -> dict[str, Any]:
         if not isinstance(value, str) or not value:
             return None
         try:
-            return datetime.fromisoformat(value)
+            parsed = datetime.fromisoformat(value)
+            # A missing timezone cannot establish ordering against stored UTC events.
+            return parsed if parsed.utcoffset() is not None else None
         except ValueError:
             return None
 

@@ -1,4 +1,4 @@
-import type { ExpertInput, ExpertResponse, Health, ImpactInput, ImpactResponse, QueryResponse } from './types';
+import type { ExpertInput, ExpertResponse, FreshnessInput, FreshnessResponse, Health, ImpactInput, ImpactResponse, QueryResponse } from './types';
 
 export class ApiError extends Error {
   constructor(message: string, public code = 'REQUEST_FAILED') { super(message); }
@@ -160,6 +160,61 @@ export async function findExperts(request: ExpertInput): Promise<ExpertResponse>
     throw new ApiError('The API returned an incompatible Expert Finder format.', 'INVALID_RESPONSE');
   }
   return response as ExpertResponse;
+}
+
+export async function checkFreshness(request: FreshnessInput): Promise<FreshnessResponse> {
+  const response = await postEvidence('/api/tools/freshness', request);
+  const data: unknown = (response as FreshnessResponse).data;
+  const nodes = new Map(response.graph.nodes.map(n => [n.id, n]));
+  const sourceIds = new Set(response.sources.map(s => s.id));
+  const seen = new Set<string>();
+  const resolved = record(data) && record(data.entity) && nonempty(data.entity.id) ? nodes.get(data.entity.id) : undefined;
+  function time(value: unknown): number {
+    return typeof value === 'string' && /(?:Z|[+-]\d\d:\d\d)$/.test(value) ? Date.parse(value) : NaN;
+  }
+  function path(value: unknown): value is { source: string; type: string; target: string }[] {
+    return Array.isArray(value) && value.length >= 1 && value.length <= 2 && value.every(p => record(p)
+      && response.graph.edges.some(e => e.source === p.source && e.type === p.type && e.target === p.target));
+  }
+  function citations(value: unknown, id: string): boolean {
+    return strings(value) && value.length <= 1 && value.every(s => s === id && sourceIds.has(s));
+  }
+  if (!record(data) || !response.tools_used.includes('find_stale_knowledge')
+    || !(data.entity === null || (record(data.entity) && nonempty(data.entity.id)
+      && JSON.stringify(data.entity) === JSON.stringify(nodes.get(data.entity.id))
+      && (data.entity.id === request.entity.trim() || ['name', 'title'].some(f =>
+        String(resolved?.properties[f] ?? '').toLowerCase() === request.entity.trim().toLowerCase()))))
+    || !Array.isArray(data.review_candidates) || data.review_candidates.length > 50
+    || !data.review_candidates.every(f => {
+      const target = record(data.entity) ? data.entity.id : null;
+      if (!record(f) || !nonempty(f.document_id) || seen.has(f.document_id)
+        || nodes.get(f.document_id)?.type !== 'Document' || nodes.get(String(target))?.type !== 'Service'
+        || JSON.stringify(f.document) !== JSON.stringify(nodes.get(f.document_id))
+        || f.affected_entity_id !== target || f.updated_at !== nodes.get(f.document_id)?.properties.updated_at
+        || !Number.isFinite(time(f.updated_at)) || !path(f.document_path)
+        || !citations(f.source_ids, f.document_id)
+        || f.reason !== 'Later graph-linked changes affect the same service; review may be warranted.') return false;
+      const p = f.document_path;
+      if (!(p.length === 1 && p[0].source === f.document_id && p[0].type === 'DESCRIBES' && p[0].target === target)
+        && !(p.length === 2 && nodes.get(p[0].source)?.type === 'Decision' && p[0].type === 'DOCUMENTED_IN'
+          && p[0].target === f.document_id && p[1].source === p[0].source && p[1].type === 'AFFECTS' && p[1].target === target)) return false;
+      const events = new Set<string>();
+      if (!Array.isArray(f.triggers) || !f.triggers.length || f.triggers.length > 150 || !f.triggers.every(t => {
+        if (!record(t) || !nonempty(t.id) || events.has(t.id) || !path(t.path) || t.path.length !== 1
+          || t.affected_entity_id !== target || t.path[0].source !== t.id || t.path[0].target !== target
+          || !Number.isFinite(time(t.timestamp)) || time(t.timestamp) <= time(f.updated_at)) return false;
+        const node = nodes.get(t.id);
+        const valid = t.type === 'decision' ? node?.type === 'Decision' && node.properties.status === 'accepted'
+          && t.timestamp === node.properties.decided_at && t.path[0].type === 'AFFECTS'
+          : t.type === 'commit' ? node?.type === 'Commit' && node.properties.architecture_change === true
+            && t.timestamp === node.properties.timestamp && t.path[0].type === 'CHANGES'
+            : t.type === 'incident' && node?.type === 'Incident' && t.timestamp === node.properties.started_at && t.path[0].type === 'AFFECTS';
+        if (!valid || !(t.type === 'commit' ? citations(t.source_ids, t.id) : strings(t.source_ids) && !t.source_ids.length)) return false;
+        events.add(t.id); return true;
+      })) return false;
+      seen.add(f.document_id); return true;
+    })) throw new ApiError('The API returned an incompatible Knowledge Freshness format.', 'INVALID_RESPONSE');
+  return response as FreshnessResponse;
 }
 
 export async function getHealth(): Promise<Health> {

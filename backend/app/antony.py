@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from .config import Settings
 from .graph import GraphContractError
-from .models import ExpertInput, ExpertResult, ImpactInput, ImpactResult, TraceInput, TraceResult
+from .models import ExpertInput, ExpertResult, FreshnessInput, FreshnessResult, ImpactInput, ImpactResult, TraceInput, TraceResult
 
 
 def normalize_impact(payload: dict) -> ImpactResult:
@@ -20,6 +20,13 @@ def normalize_experts(payload: dict) -> ExpertResult:
         return ExpertResult.model_validate(payload)
     except (TypeError, ValueError, ValidationError) as exc:
         raise GraphContractError("Invalid teammate expert finder") from exc
+
+
+def normalize_freshness(payload: dict) -> FreshnessResult:
+    try:
+        return FreshnessResult.model_validate(payload)
+    except (TypeError, ValueError, ValidationError) as exc:
+        raise GraphContractError("Invalid teammate freshness result") from exc
 
 
 def normalize_trace(payload: dict) -> TraceResult:
@@ -132,6 +139,17 @@ class AntonyGateway:
             finally:
                 client.close()
         return normalize_experts(await asyncio.to_thread(retrieve))
+
+    async def find_stale_knowledge(self, query: FreshnessInput) -> FreshnessResult:
+        from weave_graph.freshness import find_stale_knowledge
+
+        def retrieve():
+            client = self._client()
+            try:
+                return find_stale_knowledge(client, query.entity)
+            finally:
+                client.close()
+        return normalize_freshness(await asyncio.to_thread(retrieve))
 
 
 def create_gateway(settings: Settings) -> AntonyGateway:

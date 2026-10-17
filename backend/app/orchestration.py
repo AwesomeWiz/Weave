@@ -11,7 +11,8 @@ from .context_v2 import CombinedContext, ToolEvidence, ToolProvenance, merge_con
 from .graph import GraphContractError, GraphGateway, GraphUnavailable
 from .impact import build_impact_context
 from .experts import build_expert_context
-from .models import ExpertInput, ExpertResult, ImpactInput, ImpactResult, Source, TraceInput, TraceResult
+from .freshness import build_freshness_context
+from .models import ExpertInput, ExpertResult, FreshnessInput, FreshnessResult, ImpactInput, ImpactResult, Source, TraceInput, TraceResult
 from .router import RoutingPlan
 
 
@@ -51,6 +52,16 @@ def _expert(result, records, arguments):
     return ToolEvidence("find_expert", "Expert Finder", "find_expert", context, paths)
 
 
+def _freshness(result, records, arguments):
+    context, data = build_freshness_context(result, records, arguments)
+    paths = tuple(tuple(next(e.id for e in context.graph.edges
+                             if (e.source, e.type, e.target) == (step.source, step.type, step.target))
+                        for step in path)
+                  for finding in data.review_candidates
+                  for path in [finding.document_path, *(t.path for t in finding.triggers)])
+    return ToolEvidence("find_stale_knowledge", "Knowledge Freshness", "find_stale_knowledge", context, paths)
+
+
 TOOL_REGISTRY = {
     "decision_trace": ToolSpec("Decision Trace", "trace_decision", "trace_decision", TraceInput, TraceResult,
                                lambda result: result.source_ids, _trace),
@@ -58,8 +69,11 @@ TOOL_REGISTRY = {
                                 lambda result: [s.id for s in result.sources], _impact),
     "find_expert": ToolSpec("Expert Finder", "find_expert", "find_expert", ExpertInput, ExpertResult,
                             lambda result: [s.id for s in result.sources], _expert),
+    "find_stale_knowledge": ToolSpec("Knowledge Freshness", "find_stale_knowledge", "find_stale_knowledge",
+                                     FreshnessInput, FreshnessResult,
+                                     lambda result: [s.id for s in result.sources], _freshness),
 }
-FUTURE_TITLES = {"find_stale_knowledge": "Knowledge Freshness"}
+FUTURE_TITLES = {}
 
 
 async def execute_plan(plan: RoutingPlan, gateway: GraphGateway,

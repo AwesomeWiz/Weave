@@ -5,7 +5,7 @@ from typing import Callable
 
 from pydantic import BaseModel
 
-from .models import ExpertInput, ImpactInput, TraceInput
+from .models import ExpertInput, FreshnessInput, ImpactInput, TraceInput
 
 
 IMPACT_ALIASES = {
@@ -121,9 +121,25 @@ def _impact_intent(clause: str) -> ImpactInput | None:
     return route_impact(clause)
 
 
-def _freshness_intent(clause: str) -> DeferredIntent | None:
-    return DeferredIntent(question=clause) if re.search(
-        r"\b(stale|freshness|outdated|up to date|up-to-date)\b", clause, re.I) else None
+def _freshness_intent(clause: str) -> FreshnessInput | None:
+    if _expert_intent(clause) or not re.search(
+            r"\b(stale|freshness|outdated|up to date|up-to-date|need review|still current)\b", clause, re.I):
+        return None
+    patterns = (
+        r"(?:is|are) (?:the )?(.+?) (?:documentation|documents|docs) (?:stale|outdated|up.to.date|still current)",
+        r"which (?:documents|docs) (?:about|for) (.+?) need review",
+        r"(?:check |show )?(?:knowledge )?freshness (?:for|of) (.+)",
+    )
+    for pattern in patterns:
+        match = re.fullmatch(pattern, clause.strip().rstrip('?'), re.I)
+        if not match:
+            continue
+        entity = match[1].strip()
+        if re.search(r"\b(and|or|our|this|that|it)\b", entity, re.I):
+            return None
+        if re.fullmatch(r"service:[a-z0-9]+(?:-[a-z0-9]+)*|[A-Za-z][A-Za-z0-9 -]* Service", entity, re.I):
+            return FreshnessInput(entity=entity)
+    return None
 
 
 # Trusted registry order is also execution order. Future matchers do not provide

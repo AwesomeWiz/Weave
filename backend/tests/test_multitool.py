@@ -92,7 +92,7 @@ def test_combined_http_exact_public_contract_and_no_llm(database):
     (TRACE + "; " + TRACE, ["decision_trace"]),
     ("What led to Redis being introduced for Payment Service?", ["decision_trace"]),
     (TRACE + ", and who knows about Redis?", ["decision_trace", "find_expert"]),
-    ("Are the docs up to date?", ["find_stale_knowledge"]),
+    ("Are the docs up to date?", []),
 ])
 def test_routing_plan_order_and_rules(question, names):
     assert [call.name for call in plan_question(question).calls] == names
@@ -209,11 +209,11 @@ def test_future_only_intent_executes_nothing():
     class NoCalls:
         def __getattr__(self, _):
             pytest.fail("An unregistered future tool attempted to use a gateway")
-    context, tools = asyncio.run(execute_plan(plan_question("Are the docs up to date?"), NoCalls()))
+    context, tools = asyncio.run(execute_plan(RoutingPlan((ToolCall("test_future", DeferredIntent(question="Future")),)), NoCalls()))
     assert context.status == "insufficient_evidence" and not tools and not context.graph.nodes
     assert "not implemented or registered" in context.summary
-    assert context.per_tool["find_stale_knowledge"].state == "unregistered"
-    assert context.per_tool["find_stale_knowledge"].status == "insufficient_evidence"
+    assert context.per_tool["test_future"].state == "unregistered"
+    assert context.per_tool["test_future"].status == "insufficient_evidence"
 
 
 def test_missing_gateway_method_is_isolated_and_tracked(database):

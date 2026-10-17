@@ -2,8 +2,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from weave_graph.freshness import find_stale_knowledge
 
-from app.graph.freshness import find_stale_knowledge
 from weave_data.graph_adapter import InMemoryGraphAdapter
 from weave_data.ingest import run_ingestion
 

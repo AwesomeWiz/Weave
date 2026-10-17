@@ -9,7 +9,7 @@ from typing import Protocol
 from pydantic import TypeAdapter, ValidationError
 
 from .config import Settings
-from .models import ExpertInput, ExpertResult, ImpactInput, ImpactResult, Source, TraceInput, TraceResult
+from .models import ExpertInput, ExpertResult, FreshnessInput, FreshnessResult, ImpactInput, ImpactResult, Source, TraceInput, TraceResult
 
 
 class GraphUnavailable(Exception):
@@ -34,6 +34,8 @@ class GraphGateway(SourceRetriever, Protocol):
     async def impact_analysis(self, query: ImpactInput) -> ImpactResult: ...
 
     async def find_expert(self, query: ExpertInput) -> ExpertResult: ...
+
+    async def find_stale_knowledge(self, query: FreshnessInput) -> FreshnessResult: ...
 
 
 class FixtureGateway:
@@ -67,6 +69,10 @@ class FixtureGateway:
         # No fabricated people or implicit use of the local corpus.
         return ExpertResult(data={"query": query.query, "topics": [], "experts": [], "scoring": {}},
                             warnings=["No development Expert Finder fixture is configured."])
+
+    async def find_stale_knowledge(self, query: FreshnessInput) -> FreshnessResult:
+        return FreshnessResult(data={"entity": None, "review_candidates": []},
+                               warnings=["No development Knowledge Freshness fixture is configured."])
 
 
 class FalkorGateway:
@@ -186,6 +192,21 @@ class FalkorGateway:
             return ExpertResult.model_validate(result)
         except ValidationError as exc:
             raise GraphContractError("Invalid expert result") from exc
+
+    async def find_stale_knowledge(self, query: FreshnessInput) -> FreshnessResult:
+        method = getattr(self.delegate, "find_stale_knowledge", None)
+        if not inspect.iscoroutinefunction(method):
+            raise GraphUnavailable()
+        try:
+            result = await asyncio.wait_for(method(query), timeout=15)
+        except GraphContractError:
+            raise
+        except Exception as exc:
+            raise GraphUnavailable() from exc
+        try:
+            return FreshnessResult.model_validate(result)
+        except ValidationError as exc:
+            raise GraphContractError("Invalid freshness result") from exc
 
 
 def create_gateway(settings: Settings) -> GraphGateway:

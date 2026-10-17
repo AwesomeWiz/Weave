@@ -2,12 +2,13 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { analyzeImpact, ApiError, askQuestion, findExperts, getHealth } from './api';
+import { analyzeImpact, ApiError, askQuestion, checkFreshness, findExperts, getHealth } from './api';
 import { impactFixture } from './test/impactFixture';
+import { freshnessFixture } from './test/freshnessFixture';
 import { expertFixture } from './test/expertFixture';
 import type { Health, QueryResponse } from './types';
 
-vi.mock('./api', async importOriginal => ({ ...await importOriginal<typeof import('./api')>(), askQuestion: vi.fn(), analyzeImpact: vi.fn(), findExperts: vi.fn(), getHealth: vi.fn() }));
+vi.mock('./api', async importOriginal => ({ ...await importOriginal<typeof import('./api')>(), askQuestion: vi.fn(), analyzeImpact: vi.fn(), findExperts: vi.fn(), checkFreshness: vi.fn(), getHealth: vi.fn() }));
 vi.mock('./components/EvidenceGraph', () => ({ default: ({ onSelect, graph, selectedId }: { onSelect: (n: QueryResponse['graph']['nodes'][number]) => void; graph: QueryResponse['graph']; selectedId?: string }) => <button aria-pressed={selectedId === graph.nodes[0]?.id} onClick={() => onSelect(graph.nodes[0])}>Inspect graph test node</button> }));
 
 const health: Health = { status: 'degraded', backend: 'available', falkordb: 'not_checked', graph_tool: 'fixture', llm: 'disabled', graph: 'novapay', graph_mode: 'fixture' };
@@ -22,6 +23,47 @@ beforeEach(() => { localStorage.clear(); sessionStorage.clear(); vi.mocked(getHe
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe('question workflow', () => {
+  it('runs Freshness and inspects real citations and graph-only changes', async () => {
+    vi.mocked(checkFreshness).mockResolvedValue(freshnessFixture);
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Knowledge Freshness/ }));
+    expect(await screen.findByRole('heading', { name: 'Knowledge Freshness' })).toBeInTheDocument();
+    expect(checkFreshness).toHaveBeenCalledWith({ entity: 'Payment Service' });
+    expect(askQuestion).not.toHaveBeenCalled();
+    expect(screen.getByText('Review recommended')).toBeInTheDocument();
+    expect(screen.getByText('2026-05-01T00:00:00Z')).toBeInTheDocument();
+    expect(screen.getByText(/Graph-only change evidence/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'doc:architecture-overview' }));
+    expect(screen.getByLabelText('Source inspector')).toHaveTextContent('Test-only retrieved excerpt.');
+    await user.keyboard('{Escape}');
+    await user.click(within(screen.getByRole('heading', { name: 'Architecture Overview' })).getByRole('button'));
+    expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('doc:architecture-overview');
+    await user.clear(screen.getByLabelText('Service name or canonical ID'));
+    await user.type(screen.getByLabelText('Service name or canonical ID'), 'Checkout Service');
+    await user.click(screen.getByRole('button', { name: 'Check freshness' }));
+    expect(checkFreshness).toHaveBeenLastCalledWith({ entity: 'Checkout Service' });
+  });
+  it('preserves Freshness outage retry and incomplete evidence warnings', async () => {
+    vi.mocked(checkFreshness).mockRejectedValue(new ApiError('Graph unavailable.', 'GRAPH_UNAVAILABLE'));
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Knowledge Freshness/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Graph unavailable.');
+    vi.mocked(checkFreshness).mockResolvedValue({ ...freshnessFixture, support_status: 'partially_supported',
+      metadata: { ...freshnessFixture.metadata, warnings: ['Missing comparable timestamps; results may be incomplete.'] } });
+    await user.click(screen.getByRole('button', { name: /Try again/ }));
+    expect(await screen.findByText(/Missing comparable timestamps/)).toBeInTheDocument();
+    expect(screen.getByText('partially supported', { selector: '.support-badge' })).toBeInTheDocument();
+  });
+  it('keeps empty ambiguous Freshness results qualified', async () => {
+    vi.mocked(checkFreshness).mockResolvedValue({ ...freshnessFixture, sources: [], support_status: 'insufficient_evidence',
+      data: { entity: null, review_candidates: [] } });
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Knowledge Freshness/ }));
+    expect(await screen.findByText(/No unambiguous service was resolved/)).toBeInTheDocument();
+    expect(screen.getByText(/This does not prove the documentation is current/)).toBeInTheDocument();
+    expect(screen.queryByText('Review recommended')).not.toBeInTheDocument();
+  });
+
   it('runs Expert Finder, distinguishes team ownership and inspects contribution sources', async () => {
     vi.mocked(findExperts).mockResolvedValue(expertFixture);
     const user = userEvent.setup(); render(<App />);

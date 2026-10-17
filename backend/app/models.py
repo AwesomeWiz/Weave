@@ -228,3 +228,57 @@ class ExpertResult(BaseModel):
 
 class ExpertResponse(QueryResponse):
     data: ExpertData
+
+
+class FreshnessInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    entity: str = Field(min_length=1, max_length=256)
+
+    @field_validator("entity")
+    @classmethod
+    def strip_entity(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Entity must not be blank")
+        return value.strip()
+
+
+class FreshnessTrigger(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    type: Literal["decision", "commit", "incident"]
+    id: str
+    timestamp: str
+    affected_entity_id: str
+    path: list[ExpertPathEdge] = Field(min_length=1, max_length=1)
+    # Derived from validated FROM_COMMIT provenance; graph-only events stay empty.
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class FreshnessFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    document: GraphNode
+    document_id: str
+    updated_at: str
+    affected_entity_id: str
+    document_path: list[ExpertPathEdge] = Field(min_length=1, max_length=2)
+    triggers: list[FreshnessTrigger] = Field(min_length=1, max_length=150)
+    reason: str
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class FreshnessData(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    entity: GraphNode | None
+    review_candidates: list[FreshnessFinding] = Field(max_length=50)
+
+
+class FreshnessResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    data: FreshnessData
+    sources: list[ExpertSourceReference] = Field(default_factory=list, max_length=100)
+    nodes: list[GraphNode] = Field(default_factory=list, max_length=80)
+    edges: list[GraphEdge] = Field(default_factory=list, max_length=200)
+    warnings: list[str] = Field(default_factory=list, max_length=200)
+
+
+class FreshnessResponse(QueryResponse):
+    data: FreshnessData

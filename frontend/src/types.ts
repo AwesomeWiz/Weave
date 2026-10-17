@@ -48,3 +48,17 @@ export interface ExpertRanking {
 export interface ExpertResponse extends QueryResponse {
   data: { query: string; topics: GraphNode[]; experts: ExpertRanking[]; scoring: Record<string, number> };
 }
+
+export interface FreshnessInput { entity: string }
+export interface FreshnessPath { source: string; type: string; target: string }
+export interface FreshnessTrigger {
+  type: 'decision' | 'commit' | 'incident'; id: string; timestamp: string;
+  affected_entity_id: string; path: FreshnessPath[]; source_ids: string[];
+}
+export interface FreshnessFinding {
+  document: GraphNode; document_id: string; updated_at: string; affected_entity_id: string;
+  document_path: FreshnessPath[]; triggers: FreshnessTrigger[]; reason: string; source_ids: string[];
+}
+export interface FreshnessResponse extends QueryResponse {
+  data: { entity: GraphNode | null; review_candidates: FreshnessFinding[] };
+}
