@@ -1,20 +1,25 @@
 """
-Weave — Tests for Impact Analysis graph relationships.
+Weave — Tests for Impact Analysis.
 
-Verifies:
-  - Direct dependents: services that directly DEPEND_ON Payment Service (e.g. Checkout Service).
-  - Indirect dependents: services downstream of direct dependents (e.g. Order Service -> Checkout -> Payment).
-  - Tech usage impact: technologies USES by services.
-  - Ownership: teams OWNS services.
-  - Traversal paths distinguish direct (1-hop) from indirect (2-hop) dependents.
+Tests:
+  - Payment Service technology relationships.
+  - Direct and indirect service dependencies.
+  - Separation of direct and indirect dependents.
+  - Service ownership relationships.
+  - Live impact_analysis() results from FalkorDB.
+  - Impact depths and traversal paths.
+  - Ownership information in impact results.
+  - Invalid depth and missing entity handling.
 """
 
 from pathlib import Path
+
 import pytest
 
+from app.graph.client import GraphClient
+from app.graph.impact import impact_analysis
 from weave_data.graph_adapter import InMemoryGraphAdapter
-from weave_data.ingest import run_ingestion, prepare_ingestion
-from weave_data.relationships import extract_relationships
+from weave_data.ingest import run_ingestion
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "novapay"
 
@@ -22,64 +27,201 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "novapay"
 @pytest.fixture(scope="module")
 def seeded_graph():
     adapter = InMemoryGraphAdapter()
-    res = run_ingestion(DATA_DIR, adapter=adapter)
-    assert res.status == "success", f"Ingestion failed: {res.errors}"
+    result = run_ingestion(DATA_DIR, adapter=adapter)
+
+    assert result.status == "success", (
+        f"Ingestion failed: {result.errors}"
+    )
+
     return adapter
 
 
-def test_payment_service_technologies(seeded_graph):
-    rel = seeded_graph.get_relationship("service:payment-service", "USES", "tech:redis")
-    assert rel is not None, "Payment Service must use tech:redis"
+@pytest.fixture
+def live_client():
+    client = GraphClient(graph_name="novapay")
 
-    rel_pg = seeded_graph.get_relationship("service:payment-service", "USES", "tech:postgresql")
-    assert rel_pg is not None, "Payment Service must use tech:postgresql"
+    try:
+        assert client.health_check(), "FalkorDB health check failed"
+        yield client
+    finally:
+        client.close()
+
+
+def test_payment_service_technologies(seeded_graph):
+    redis = seeded_graph.get_relationship(
+        "service:payment-service",
+        "USES",
+        "tech:redis",
+    )
+    postgresql = seeded_graph.get_relationship(
+        "service:payment-service",
+        "USES",
+        "tech:postgresql",
+    )
+
+    assert redis is not None
+    assert postgresql is not None
 
 
 def test_direct_dependent_checkout_service(seeded_graph):
-    """Direct impact: Checkout Service depends directly on Payment Service (1 hop)."""
-    rel = seeded_graph.get_relationship("service:checkout-service", "DEPENDS_ON", "service:payment-service")
-    assert rel is not None, "Checkout Service must directly DEPEND_ON Payment Service"
+    relationship = seeded_graph.get_relationship(
+        "service:checkout-service",
+        "DEPENDS_ON",
+        "service:payment-service",
+    )
+
+    assert relationship is not None
 
 
 def test_indirect_dependent_order_service(seeded_graph):
-    """Indirect impact: Order Service depends on Checkout Service (2 hops from Payment Service)."""
-    rel1 = seeded_graph.get_relationship("service:order-service", "DEPENDS_ON", "service:checkout-service")
-    assert rel1 is not None, "Order Service must DEPEND_ON Checkout Service"
+    order_to_checkout = seeded_graph.get_relationship(
+        "service:order-service",
+        "DEPENDS_ON",
+        "service:checkout-service",
+    )
 
-    # Verify traversal path from Order Service to Payment Service
-    # (order:Order Service)-[:DEPENDS_ON]->(checkout:Checkout Service)-[:DEPENDS_ON]->(payment:Payment Service)
-    assert rel1["target_id"] == "service:checkout-service"
-    rel2 = seeded_graph.get_relationship(rel1["target_id"], "DEPENDS_ON", "service:payment-service")
-    assert rel2 is not None, "Checkout Service must bridge Order Service to Payment Service"
+    assert order_to_checkout is not None
+    assert order_to_checkout["target_id"] == "service:checkout-service"
+
+    checkout_to_payment = seeded_graph.get_relationship(
+        order_to_checkout["target_id"],
+        "DEPENDS_ON",
+        "service:payment-service",
+    )
+
+    assert checkout_to_payment is not None
 
 
-def test_distinguish_direct_from_indirect_dependents(seeded_graph):
-    """Algorithmic BFS/traversal distinguishing direct vs indirect dependents of Payment Service."""
-    all_rels = seeded_graph.all_relationships().values()
-    depends_on_edges = [r for r in all_rels if r["rel_type"] == "DEPENDS_ON"]
+def test_direct_and_indirect_dependents_are_distinct(seeded_graph):
+    relationships = seeded_graph.all_relationships().values()
+    dependencies = [
+        relationship
+        for relationship in relationships
+        if relationship["rel_type"] == "DEPENDS_ON"
+    ]
 
-    # 1-hop (direct)
-    direct_dependents = {r["source_id"] for r in depends_on_edges if r["target_id"] == "service:payment-service"}
-    assert direct_dependents == {"service:checkout-service"}
+    direct = {
+        relationship["source_id"]
+        for relationship in dependencies
+        if relationship["target_id"] == "service:payment-service"
+    }
 
-    # 2-hop (indirect)
-    indirect_dependents = set()
-    for dep in direct_dependents:
-        for r in depends_on_edges:
-            if r["target_id"] == dep:
-                indirect_dependents.add(r["source_id"])
+    indirect = {
+        relationship["source_id"]
+        for relationship in dependencies
+        if relationship["target_id"] in direct
+    }
 
-    assert indirect_dependents == {"service:order-service"}
-    assert direct_dependents.isdisjoint(indirect_dependents), "Direct and indirect sets must be disjoint"
+    assert direct == {"service:checkout-service"}
+    assert indirect == {"service:order-service"}
+    assert direct.isdisjoint(indirect)
 
 
 def test_service_ownership_relationships(seeded_graph):
-    """Teams OWNS services."""
-    rel_pay = seeded_graph.get_relationship("team:payments", "OWNS", "service:payment-service")
-    assert rel_pay is not None, "team:payments must own service:payment-service"
+    expected_relationships = [
+        ("team:payments", "service:payment-service"),
+        ("team:platform", "service:checkout-service"),
+        ("team:platform", "service:order-service"),
+    ]
 
-    rel_chk = seeded_graph.get_relationship("team:platform", "OWNS", "service:checkout-service")
-    assert rel_chk is not None, "team:platform must own service:checkout-service"
+    for team_id, service_id in expected_relationships:
+        relationship = seeded_graph.get_relationship(
+            team_id,
+            "OWNS",
+            service_id,
+        )
+        assert relationship is not None
 
-    rel_ord = seeded_graph.get_relationship("team:platform", "OWNS", "service:order-service")
-    assert rel_ord is not None, "team:platform must own service:order-service"
+
+def test_live_impact_analysis_direct_and_indirect(live_client):
+    result = impact_analysis(
+        live_client,
+        "service:payment-service",
+        max_depth=2,
+    )
+
+    direct_ids = {
+        item["service_id"]
+        for item in result["data"]["direct_impact"]
+    }
+    indirect_ids = {
+        item["service_id"]
+        for item in result["data"]["indirect_impact"]
+    }
+
+    assert direct_ids == {"service:checkout-service"}
+    assert indirect_ids == {"service:order-service"}
+    assert result["warnings"] == []
+
+
+def test_live_impact_analysis_depths_and_paths(live_client):
+    result = impact_analysis(
+        live_client,
+        "service:payment-service",
+        max_depth=2,
+    )
+
+    direct = result["data"]["direct_impact"][0]
+    indirect = result["data"]["indirect_impact"][0]
+
+    assert direct["impact_depth"] == 1
+    assert indirect["impact_depth"] == 2
+
+    assert direct["path"] == [
+        "service:payment-service",
+        "service:checkout-service",
+    ]
+
+    assert indirect["path"] == [
+        "service:payment-service",
+        "service:checkout-service",
+        "service:order-service",
+    ]
+
+
+def test_live_impact_analysis_includes_owners(live_client):
+    result = impact_analysis(
+        live_client,
+        "service:payment-service",
+        max_depth=2,
+    )
+
+    direct = next(
+        item
+        for item in result["data"]["direct_impact"]
+        if item["service_id"] == "service:checkout-service"
+    )
+
+    owner_ids = {
+        owner["id"]
+        for owner in direct["owners"]
+    }
+
+    assert "team:platform" in owner_ids
+
+
+def test_live_impact_analysis_rejects_invalid_depth(live_client):
+    result = impact_analysis(
+        live_client,
+        "service:payment-service",
+        max_depth=4,
+    )
+
+    assert result["data"]["direct_impact"] == []
+    assert result["data"]["indirect_impact"] == []
+    assert any(
+        "max_depth" in warning
+        for warning in result["warnings"]
+    )
+
+
+def test_live_impact_analysis_handles_missing_entity(live_client):
+    result = impact_analysis(
+        live_client,
+        "service:does-not-exist",
+    )
+
+    assert result["data"]["entity"] is None
+    assert result["data"]["direct_impact"] == []
+    assert result["data"]["indirect_impact"] == []
+    assert result["warnings"]
