@@ -1,0 +1,122 @@
+{
+  "graph_name": "novapay",
+  "dataset_revision": "d8b2139af0f3938512b314ae8e9c1b8aaaff9b5a",
+  "sources": [
+    {
+      "id": "issue:PAY-42",
+      "type": "Issue",
+      "title": "Reduce payment latency under burst traffic",
+      "snippet": "During the INC-17 incident on May 10, Payment Service experienced request timeouts due to excessive database read latency under concurrent burst load. Approximately 12% of payment transactions failed during the 11:00\u201311:45 UTC peak window.\n\nInvestigation shows that repeated reads of idempotency keys and payment configuration data from PostgreSQL account for 70% of query volume during bursts. These values change infrequently and are strong candidates for caching.\n\nProposed approach:\n- Introduce an in-memory or Redis-backed cache for hot-read paths\n- Measure cache-hit ratio and p99 latency improvement\n- Validate that cache invalidation does not introduce stale-payment risks\n\nAcceptance criteria:\n- p99 payment latency < 200ms during simulated burst traffic\n- Cache-hit ratio > 80% for idempotency key lookups\n- No increase in payment inconsistency errors",
+      "url": "https://jira.novapay.example/browse/PAY-42",
+      "timestamp": "2026-05-11T09:00:00Z",
+      "entity_ids": [
+        "issue:PAY-42"
+      ],
+      "metadata": {
+        "source_id": "issue:PAY-42",
+        "source_type": "Issue",
+        "chunk_ids": [
+          "chunk:issue:PAY-42:0"
+        ],
+        "chunks": [
+          {
+            "id": "chunk:issue:PAY-42:0",
+            "source_id": "issue:PAY-42",
+            "source_type": "Issue",
+            "chunk_index": 0,
+            "title": "Reduce payment latency under burst traffic",
+            "timestamp": "2026-05-11T09:00:00Z",
+            "url": "https://jira.novapay.example/browse/PAY-42"
+          }
+        ]
+      }
+    },
+    {
+      "id": "message:payment-perf-7",
+      "type": "Message",
+      "title": "Thread: payment-perf-2026-05",
+      "snippet": "Thread: Payment Service latency improvements\n\n[2026-05-15 10:00 UTC] Alice Menon: After INC-17 I reviewed the slow-query logs. The majority of burst-window reads are idempotency key lookups and payment config fetches \u2014 both are read-heavy and change infrequently. We should cache them.\n\n[2026-05-15 10:12 UTC] Ravi Nair: Agreed. I ran a local benchmark with Redis sitting in front of Postgres for those paths. p99 dropped from 380ms to 45ms at 500 concurrent requests. Cache-hit ratio was 87% with a 60-second TTL.\n\n[2026-05-16 09:30 UTC] Maya Joseph: From a platform perspective Redis is already in our infrastructure stack for session management. We can reuse the existing cluster \u2014 no new provisioning needed.\n\n[2026-05-17 14:00 UTC] Alice Menon: Let's go ahead. I'll write up ADR-7 and Ravi can start the implementation against PAY-42. We'll target a 60-second TTL with explicit invalidation on config writes.",
+      "url": "https://slack.novapay.example/archives/payments-engineering/payment-perf-2026-05",
+      "timestamp": "2026-05-15T10:00:00Z",
+      "entity_ids": [
+        "message:payment-perf-7"
+      ],
+      "metadata": {
+        "source_id": "message:payment-perf-7",
+        "source_type": "Message",
+        "chunk_ids": [
+          "chunk:message:payment-perf-7:0"
+        ],
+        "chunks": [
+          {
+            "id": "chunk:message:payment-perf-7:0",
+            "source_id": "message:payment-perf-7",
+            "source_type": "Message",
+            "chunk_index": 0,
+            "title": "Thread: payment-perf-2026-05",
+            "timestamp": "2026-05-15T10:00:00Z",
+            "url": "https://slack.novapay.example/archives/payments-engineering/payment-perf-2026-05"
+          }
+        ]
+      }
+    },
+    {
+      "id": "commit:8fae2",
+      "type": "Commit",
+      "title": "feat: introduce Redis-backed caching for payment reads",
+      "snippet": "feat: introduce Redis-backed caching for payment reads\n\nAdd RedisCache adapter to Payment Service. Frequently-read payment\nconfiguration and idempotency keys are now served from Redis, reducing\ndirect PostgreSQL queries during burst traffic by ~60%.\n\nCloses PAY-42\nImplements Decision D-007\nSee ADR-7 for architectural rationale.",
+      "url": "https://github.novapay.example/novapay/payments-api/commit/8fae2d4",
+      "timestamp": "2026-05-19T10:15:00Z",
+      "entity_ids": [
+        "commit:8fae2"
+      ],
+      "metadata": {
+        "source_id": "commit:8fae2",
+        "source_type": "Commit",
+        "chunk_ids": [
+          "chunk:commit:8fae2:0"
+        ],
+        "chunks": [
+          {
+            "id": "chunk:commit:8fae2:0",
+            "source_id": "commit:8fae2",
+            "source_type": "Commit",
+            "chunk_index": 0,
+            "title": "feat: introduce Redis-backed caching for payment reads",
+            "timestamp": "2026-05-19T10:15:00Z",
+            "url": "https://github.novapay.example/novapay/payments-api/commit/8fae2d4"
+          }
+        ]
+      }
+    },
+    {
+      "id": "doc:ADR-7",
+      "type": "Document",
+      "title": "ADR-7: Redis Caching for Payment Service",
+      "snippet": "# ADR-7: Redis Caching for Payment Service\n\n**Status:** Accepted  \n**Date:** 2026-05-20  \n**Decision:** D-007  \n**Author:** Alice Menon  \n\n## Context\n\nDuring incident INC-17 on May 10, 2026, Payment Service experienced request timeouts under burst traffic. Investigation via issue PAY-42 revealed that 70% of database query volume during peak windows consisted of repeated reads of idempotency keys and payment configuration data from PostgreSQL. These values change infrequently and are strong candidates for caching.\n\nThe payments engineering team discussed the problem in the #payments-engineering Slack channel (thread: payment-perf-2026-05). Benchmarks showed that placing Redis in front of PostgreSQL for these read paths reduced p99 latency from 380ms to 45ms at 500 concurrent requests, with a cache-hit ratio of 87%.\n\n## Decision\n\nIntroduce Redis-backed caching in Payment Service for:\n\n1. **Idempotency key lookups** \u2014 cached with a 60-second TTL and explicit invalidation on key creation/expiry.\n2. **Payment configuration reads** \u2014 cached with a 60-second TTL and explicit invalidation on configuration writes.\n\nRedis was selected because:\n\n- It is already deployed in the NovaPay infrastructure stack for session management (confirmed by Platform Engineering).\n- No new provisioning or operational overhead is required.\n- Its sub-millisecond read latency meets the p99 < 200ms target for payment operations.\n- The team has operational experience with Redis in production.\n\n## Consequences\n\n- **Positive:** Estimated 60% reduction in direct PostgreSQL queries during burst traffic. p99 latency target of < 200ms is achievable based on benchmarks.\n- **Positive:** Reuse of existing Redis infrastructure reduces deployment risk and cost.\n- **Risk:** Cache invalidation bugs could serve stale idempotency keys, potentially allowing duplicate payment processing. Mitigated by short TTLs and explicit invalidation on writes.\n- **Risk:** Redis availability becomes a dependency for optimal Payment Service performance. Mitigated by fallback to direct PostgreSQL reads if the Redis connection is unavailable.\n\n## Implementation\n\n- **Commit:** 8fae2 in `novapay/payments-api`\n- **Issue:** PAY-42\n- **Service affected:** Payment Service\n- **Technology introduced:** Redis\n\n## Participants\n\n- Alice Menon \u2014 Payments Tech Lead (approver)\n- Ravi Nair \u2014 Payments Engineer (implementer)\n- Maya Joseph \u2014 Platform Engineer (infrastructure review)",
+      "url": "https://docs.novapay.example/adrs/ADR-7",
+      "timestamp": "2026-05-20T10:00:00Z",
+      "entity_ids": [
+        "doc:ADR-7"
+      ],
+      "metadata": {
+        "source_id": "doc:ADR-7",
+        "source_type": "Document",
+        "chunk_ids": [
+          "chunk:doc:ADR-7:0"
+        ],
+        "chunks": [
+          {
+            "id": "chunk:doc:ADR-7:0",
+            "source_id": "doc:ADR-7",
+            "source_type": "Document",
+            "chunk_index": 0,
+            "title": "ADR-7: Redis Caching for Payment Service",
+            "timestamp": "2026-05-20T10:00:00Z",
+            "url": "https://docs.novapay.example/adrs/ADR-7"
+          }
+        ]
+      }
+    }
+  ]
+}
