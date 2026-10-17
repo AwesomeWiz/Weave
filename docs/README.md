@@ -2,6 +2,8 @@
 
 Current implementation: [repository setup](../README.md), [Phase 1 contract](PHASE1_IMPLEMENTATION.md), [Phase 1 verification](PHASE1_VERIFICATION.md), and [Phase 2 Impact Analysis handoff](PHASE2_IMPACT_HANDOFF.md). Both teammate graph and source packages are integrated; offline checks pass. Successful live FalkorDB verification remains required on this machine.
 
+Latest orchestration: [Multi-tool routing and Context Builder V2](PHASE2_MULTITOOL_HANDOFF.md), including the unchanged query response contract and future graph-tool extension instructions.
+
 This folder is the recommended context pack for the shared ChatGPT Project **Weave — FalkorDB Graph Hacks**.
 
 > **Important:** These are pre-hackathon planning/reference notes. The official rules currently state that the main coding and design work must begin after the hackathon starts. Use these files to align on the idea and constraints; confirm/refine the implementation during the official build window.

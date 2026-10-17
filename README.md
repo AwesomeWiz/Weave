@@ -63,6 +63,8 @@ The factory provides async `trace_decision`, `impact_analysis` and graph-tool he
 
 Select **Impact Analysis** or ask **What depends on Payment Service?** The dedicated `POST /api/tools/impact-analysis` endpoint accepts `{"entity_id":"service:payment-service","max_depth":2}`. The UI shows direct and potential downstream findings, actual directed paths, available owners and related sources. Depth is 1–3, including the technology `USES` hop. Structural impact remains `partially_supported`; a related historical issue does not prove failure propagation. `/api/query` retains its original response schema.
 
+`/api/query` also supports bounded combined questions, such as **What led to Redis being introduced for Payment Service, and what services might be affected if Redis were removed?** Each capability validates independently before Context Builder V2 merges genuine evidence. See the [multi-tool handoff](docs/PHASE2_MULTITOOL_HANDOFF.md) for routing rules, support/failure behavior and future-tool registration. Expert Finder and Knowledge Freshness intents are recognized but never executed until their real implementations are registered.
+
 Without that implementation, the primary query returns HTTP **503 / GRAPH_UNAVAILABLE**. Health separately checks actual FalkorDB graph availability and tool availability; a reachable database alone is insufficient. The health probe only uses `GRAPH.LIST` and a bounded read-only graph query.
 
 ## Optional Qwen through Ollama

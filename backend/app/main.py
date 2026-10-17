@@ -12,7 +12,8 @@ from .graph import FalkorGateway, GraphContractError, GraphGateway, GraphUnavail
 from .llm import LLMProvider, create_provider
 from .impact import build_impact_context
 from .models import HealthResponse, ImpactInput, ImpactResponse, Metadata, QueryRequest, QueryResponse
-from .router import route_question
+from .orchestration import TOOL_REGISTRY, execute_plan
+from .router import plan_question, route_question
 
 
 def error_response(code: str, message: str, status: int) -> JSONResponse:
@@ -103,18 +104,21 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
     async def query(request: QueryRequest):
         start = time.perf_counter()
         metadata = Metadata(latency_ms=0, graph_mode=config.graph_mode)
+        plan = plan_question(request.question)
         target = route_question(request.question)
+        if (plan.composite or plan.limitations or target is None
+                or any(call.name not in TOOL_REGISTRY for call in plan.calls)):
+            context, tools_used = await execute_plan(plan, graph)
+            metadata.warnings = context.warnings
+            if config.graph_mode == "fixture":
+                metadata.warnings.insert(0, "Development fixture — synthetic evidence, not live FalkorDB data.")
+            metadata.latency_ms = round((time.perf_counter() - start) * 1000)
+            return QueryResponse(answer=context.summary, support_status=context.status,
+                                 tools_used=tools_used, sources=context.sources,
+                                 graph=context.graph, metadata=metadata)
         if isinstance(target, ImpactInput):
             response = await run_impact(target)
             return QueryResponse.model_validate(response.model_dump(exclude={"data"}))
-        if not target:
-            metadata.latency_ms = round((time.perf_counter() - start) * 1000)
-            return QueryResponse(
-                answer="Weave supports Decision Trace and single-target Impact Analysis. "
-                       "Try: Why does Payment Service use Redis? Or: What depends on Payment Service? "
-                       "Other questions do not yet have a supported retrieval route.",
-                support_status="insufficient_evidence", tools_used=[], metadata=metadata,
-            )
         trace = await graph.trace_decision(target)
         try:
             records = await graph.find_sources(trace.source_ids)

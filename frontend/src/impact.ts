@@ -11,7 +11,10 @@ export const IMPACT_TARGETS = [
 // These documented aliases resolve identifiers, never evidence or dependencies.
 export function routeImpactQuestion(question: string): ImpactInput | null {
   const text = question.toLowerCase();
-  if (/\b(why|decision|rationale|owns|owner|chose|chosen)\b/.test(text)
+  // Compound questions belong to the backend planner, never this single-tool shortcut.
+  if (/\band\s+(what|why|which|who|how|are|is|tell|show|find|check)\b|[;?].+\S/.test(text)
+    || /\bwhat (?:has )?changed\b|\bchanges (?:to|in)\b/.test(text)
+    || /\b(why|decision|rationale|introduced|led to|evidence|owns|owner|chose|chosen|expert|experts|freshness|stale|outdated|up to date)\b/.test(text)
     || !/\b(affect\w*|impact\w*|depends on|depend on|break\w*|removed?|changed?)\b/.test(text)) return null;
   const aliases: [RegExp, string][] = [
     [/\bpayments?[ -]service\b/, 'service:payment-service'], [/\bcheckout[ -]service\b/, 'service:checkout-service'],

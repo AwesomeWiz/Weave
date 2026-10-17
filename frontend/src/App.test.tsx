@@ -21,6 +21,26 @@ beforeEach(() => { localStorage.clear(); sessionStorage.clear(); vi.mocked(getHe
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe('question workflow', () => {
+  it('renders a combined answer through /api/query with citations and the existing graph inspector', async () => {
+    const combined = 'What led to Redis being introduced for Payment Service, and what services might be affected if Redis were removed?';
+    vi.mocked(askQuestion).mockResolvedValue({ ...result, support_status: 'partially_supported',
+      tools_used: ['trace_decision', 'impact_analysis'],
+      answer: 'Historical decision evidence: retrieved rationale [decision:test].\n\nPotential downstream impact: structural evidence only. Missing textual proof of failure propagation.',
+    });
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('textbox'));
+    await user.paste(combined); await user.keyboard('{Enter}');
+    expect(await screen.findByText(/Historical decision evidence/)).toBeInTheDocument();
+    expect(screen.getByText(/Potential downstream impact: structural evidence only/)).toBeInTheDocument();
+    expect(screen.getByText('partially supported', { selector: '.support-badge' })).toBeInTheDocument();
+    expect(askQuestion).toHaveBeenCalledWith(combined);
+    expect(analyzeImpact).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Impact Analysis controls')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'test' }));
+    expect(screen.getByLabelText('Source inspector')).toHaveTextContent('Fixture source excerpt');
+    await user.click(screen.getByRole('button', { name: 'Inspect graph test node' }));
+    expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('decision:test');
+  });
   it('runs Impact Analysis from the card, separates findings, and inspects a highlighted path', async () => {
     vi.mocked(analyzeImpact).mockResolvedValue(impactFixture);
     const user = userEvent.setup(); render(<App />);

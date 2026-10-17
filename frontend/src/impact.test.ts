@@ -43,4 +43,13 @@ describe('Impact Analysis API and endpoint selection', () => {
   it.each(['Why does Payment Service use Redis?', 'Why does Payment Service use Redis, and what breaks if removed?', 'What depends on Payment Service and Redis?', 'What depends on Payment Service and Fraud Service?', 'What does Payment Service depend on?', 'What depends on Fraud Service?'])('leaves non-impact or ambiguous %s to backend routing', question => {
     expect(routeImpactQuestion(question)).toBeNull();
   });
+  it.each([
+    'What led to Redis being introduced for Payment Service, and what services might be affected if Redis were removed?',
+    'What led to Redis being introduced, and what services might be affected if Redis were removed?',
+    'What depends on Payment Service; who knows about it?',
+    'What depends on Payment Service, and are the docs up to date?',
+    'What changed in Payment Service?',
+  ])('leaves compound question %s to the backend multi-tool planner', question => {
+    expect(routeImpactQuestion(question)).toBeNull();
+  });
 });
