@@ -181,6 +181,9 @@ def find_expert(
         for alias, canonical_id in load_aliases().items()
         if alias in normalized
     }
+    for term in terms:
+        if re.match(r"^d-\d+$", term, re.IGNORECASE):
+            alias_ids.add(f"decision:{term.upper()}")
     candidates = sorted(set(terms + phrases + [normalized, *alias_ids]))[:12]
 
     topic_result = client.execute(
@@ -204,6 +207,7 @@ def find_expert(
     )
     warn_if_capped(topic_result, TOPIC_CANDIDATE_CAP, "Topic resolution")
     resolved_topics: list[tuple[dict[str, Any], int]] = []
+    alias_ids_cf = {a.casefold() for a in alias_ids}
     for row in topic_result.result_set:
         node = add_node(row[0])
         if node is None:
@@ -219,7 +223,20 @@ def find_expert(
             str(node["properties"].get(field, "")).casefold()
             for field in ("id", "name", "title", "key")
         }
-        if node["id"].casefold() in alias_ids or exact_values & set(candidates):
+        if (
+            node["id"].casefold() in alias_ids_cf
+            or exact_values & set(candidates)
+            or (
+                node["type"] == "Decision"
+                and any(term.casefold() == "decision" for term in terms)
+                and any(
+                    candidate in node["properties"].get("title", "").casefold()
+                    for candidate in candidates
+                    if candidate in alias_ids_cf
+                    or any(alias in candidate for alias in load_aliases())
+                )
+            )
+        ):
             match_score = 3
         else:
             match_score = max(

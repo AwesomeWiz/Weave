@@ -2,8 +2,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from weave_graph.experts import find_expert
 
-from app.graph.experts import find_expert
 from weave_data.graph_adapter import InMemoryGraphAdapter
 from weave_data.ingest import run_ingestion
 
