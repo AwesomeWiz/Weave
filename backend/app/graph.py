@@ -9,7 +9,7 @@ from typing import Protocol
 from pydantic import TypeAdapter, ValidationError
 
 from .config import Settings
-from .models import ImpactInput, ImpactResult, Source, TraceInput, TraceResult
+from .models import ExpertInput, ExpertResult, ImpactInput, ImpactResult, Source, TraceInput, TraceResult
 
 
 class GraphUnavailable(Exception):
@@ -32,6 +32,8 @@ class GraphGateway(SourceRetriever, Protocol):
     async def trace_decision(self, query: TraceInput) -> TraceResult: ...
 
     async def impact_analysis(self, query: ImpactInput) -> ImpactResult: ...
+
+    async def find_expert(self, query: ExpertInput) -> ExpertResult: ...
 
 
 class FixtureGateway:
@@ -60,6 +62,11 @@ class FixtureGateway:
         payload = examples.get(f"{query.entity_id}/{query.max_depth}")
         return ImpactResult.model_validate(payload) if payload else ImpactResult(
             data={}, warnings=["No development impact example exists for this target."])
+
+    async def find_expert(self, query: ExpertInput) -> ExpertResult:
+        # No fabricated people or implicit use of the local corpus.
+        return ExpertResult(data={"query": query.query, "topics": [], "experts": [], "scoring": {}},
+                            warnings=["No development Expert Finder fixture is configured."])
 
 
 class FalkorGateway:
@@ -164,6 +171,21 @@ class FalkorGateway:
             return ImpactResult.model_validate(result)
         except ValidationError as exc:
             raise GraphContractError("Invalid impact result") from exc
+
+    async def find_expert(self, query: ExpertInput) -> ExpertResult:
+        method = getattr(self.delegate, "find_expert", None)
+        if not inspect.iscoroutinefunction(method):
+            raise GraphUnavailable()
+        try:
+            result = await asyncio.wait_for(method(query), timeout=15)
+        except GraphContractError:
+            raise
+        except Exception as exc:
+            raise GraphUnavailable() from exc
+        try:
+            return ExpertResult.model_validate(result)
+        except ValidationError as exc:
+            raise GraphContractError("Invalid expert result") from exc
 
 
 def create_gateway(settings: Settings) -> GraphGateway:

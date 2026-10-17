@@ -12,7 +12,8 @@ from .context_v2 import CombinedContext
 from .graph import FalkorGateway, GraphContractError, GraphGateway, GraphUnavailable, create_gateway
 from .llm import LLMProvider, create_provider
 from .impact import build_impact_context
-from .models import HealthResponse, ImpactInput, ImpactResponse, Metadata, QueryRequest, QueryResponse
+from .experts import build_expert_context
+from .models import ExpertInput, ExpertResponse, HealthResponse, ImpactInput, ImpactResponse, Metadata, QueryRequest, QueryResponse
 from .orchestration import TOOL_REGISTRY, execute_plan
 from .router import plan_question, route_question
 from .synthesis import single_tool_context
@@ -35,6 +36,9 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request, _error):
+        if _request.url.path == "/api/tools/expert-finder":
+            return error_response("INVALID_REQUEST", "Enter a nonblank query of 1–2,000 characters "
+                                  "and an integer limit between 1 and 10.", 422)
         if _request.url.path == "/api/tools/impact-analysis":
             return error_response("INVALID_REQUEST", "Use a canonical service: or tech: entity ID "
                                   "and an integer max_depth between 1 and 3.", 422)
@@ -117,12 +121,36 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
     async def impact_analysis(request: ImpactInput):
         return await run_impact(request)
 
+    async def run_expert(request: ExpertInput) -> ExpertResponse:
+        start = time.perf_counter()
+        result = await graph.find_expert(request)
+        try:
+            records = await graph.find_sources(list(dict.fromkeys(s.id for s in result.sources)))
+        except GraphUnavailable:
+            records = []
+            result.warnings.append("Source retrieval is unavailable; graph evidence was retained.")
+        context, data = build_expert_context(result, records, request)
+        if config.graph_mode == "fixture":
+            context.warnings.insert(0, "Development fixture — synthetic evidence, not live FalkorDB data.")
+        metadata = Metadata(latency_ms=0, graph_mode=config.graph_mode, warnings=context.warnings)
+        answer = await hosted_answer(request.query, context, metadata, "find_expert")
+        metadata.latency_ms = round((time.perf_counter() - start) * 1000)
+        return ExpertResponse(answer=answer, support_status=context.status, tools_used=["find_expert"],
+                              sources=context.sources, graph=context.graph, metadata=metadata, data=data)
+
+    @app.post("/api/tools/expert-finder", response_model=ExpertResponse)
+    async def expert_finder(request: ExpertInput):
+        return await run_expert(request)
+
     @app.post("/api/query", response_model=QueryResponse)
     async def query(request: QueryRequest):
         start = time.perf_counter()
         metadata = Metadata(latency_ms=0, graph_mode=config.graph_mode)
         plan = plan_question(request.question)
         target = route_question(request.question)
+        if len(plan.calls) == 1 and plan.calls[0].name == "find_expert" and not plan.limitations and not plan.composite:
+            response = await run_expert(ExpertInput.model_validate(plan.calls[0].arguments.model_dump()))
+            return QueryResponse.model_validate(response.model_dump(exclude={"data"}))
         if (plan.composite or plan.limitations or target is None
                 or any(call.name not in TOOL_REGISTRY for call in plan.calls)):
             context, tools_used = await execute_plan(plan, graph)

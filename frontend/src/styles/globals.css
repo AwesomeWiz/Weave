@@ -192,8 +192,8 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 /* Impact Analysis uses the existing paper, forest, and evidence components. */
 .impact-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px; margin: 0 0 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
 .impact-controls label { display: grid; gap: 6px; color: var(--text-muted); font-size: 12px; }
-.impact-controls select { min-height: 38px; max-width: 100%; padding: 7px 30px 7px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); background: var(--surface); font: inherit; font-size: 14px; }
-.impact-controls select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.impact-controls select, .impact-controls input { min-height: 38px; max-width: 100%; padding: 7px 30px 7px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); background: var(--surface); font: inherit; font-size: 14px; }
+.impact-controls select:focus-visible, .impact-controls input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .impact-results h2 { font-size: 22px; margin: 6px 0 18px; }
 .impact-target { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .impact-target > .small { flex-basis: 100%; }

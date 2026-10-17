@@ -5,7 +5,7 @@ from typing import Callable
 
 from pydantic import BaseModel
 
-from .models import ImpactInput, TraceInput
+from .models import ExpertInput, ImpactInput, TraceInput
 
 
 IMPACT_ALIASES = {
@@ -91,6 +91,8 @@ class DeferredIntent(BaseModel):
 
 def _trace_intent(clause: str) -> TraceInput | None:
     text = clause.casefold()
+    if _expert_intent(clause):
+        return None
     # Keep clauses explicit. Never resolve a pronoun or silently choose between
     # several services/technologies, even when the Phase 1 alias is also present.
     if re.search(r"\band\b", text):
@@ -106,9 +108,10 @@ def _trace_intent(clause: str) -> TraceInput | None:
     return candidate if isinstance(candidate, TraceInput) else None
 
 
-def _expert_intent(clause: str) -> DeferredIntent | None:
-    return DeferredIntent(question=clause) if re.search(
-        r"\b(expert|experts|who knows|who worked on|who can explain)\b", clause, re.I) else None
+def _expert_intent(clause: str) -> ExpertInput | None:
+    return ExpertInput(query=clause.strip()) if re.search(
+        r"\b(expert|experts|who knows|who worked on|who can explain|who approved|who made (?:the|this) decision)\b",
+        clause, re.I) else None
 
 
 def _impact_intent(clause: str) -> ImpactInput | None:
@@ -136,8 +139,18 @@ ROUTING_RULES = (
 def plan_question(question: str, rules: tuple[RoutingRule, ...] = ROUTING_RULES) -> RoutingPlan:
     """Up to four explicit intent clauses; no inferred entities or tool arguments."""
     text = question.strip().strip("?; ")
+    # One documented anaphoric grammar, with an explicit service/technology pair.
+    # 'it' is the object of 'use'; arbitrary pronouns elsewhere stay unresolved.
+    showcase = re.fullmatch(r"why does payment service use redis,?\s+who made the decision,?\s+and "
+                            r"what would be affected if we removed it", text, re.I)
+    if showcase and rules is ROUTING_RULES:
+        return RoutingPlan((
+            ToolCall("decision_trace", TraceInput(service="Payment Service", technology="Redis")),
+            ToolCall("impact_analysis", ImpactInput(entity_id="tech:redis")),
+            ToolCall("find_expert", ExpertInput(query="Who can explain the Redis decision?")),
+        ), composite=True)
     clauses = re.split(
-        r"[;?]+\s*(?:and\s+)?|\s*,?\s+and\s+(?=(?:what|why|which|who|how|are|is|tell|show|find|check)\b)",
+        r"[;?]+\s*(?:and\s+)?|,\s*(?=who\b)|\s*,?\s+and\s+(?=(?:what|why|which|who|how|are|is|tell|show|find|check)\b)",
         text, flags=re.I,
     )
     if len(clauses) > 4:

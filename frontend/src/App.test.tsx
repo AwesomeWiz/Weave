@@ -2,11 +2,12 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { analyzeImpact, ApiError, askQuestion, getHealth } from './api';
+import { analyzeImpact, ApiError, askQuestion, findExperts, getHealth } from './api';
 import { impactFixture } from './test/impactFixture';
+import { expertFixture } from './test/expertFixture';
 import type { Health, QueryResponse } from './types';
 
-vi.mock('./api', async importOriginal => ({ ...await importOriginal<typeof import('./api')>(), askQuestion: vi.fn(), analyzeImpact: vi.fn(), getHealth: vi.fn() }));
+vi.mock('./api', async importOriginal => ({ ...await importOriginal<typeof import('./api')>(), askQuestion: vi.fn(), analyzeImpact: vi.fn(), findExperts: vi.fn(), getHealth: vi.fn() }));
 vi.mock('./components/EvidenceGraph', () => ({ default: ({ onSelect, graph, selectedId }: { onSelect: (n: QueryResponse['graph']['nodes'][number]) => void; graph: QueryResponse['graph']; selectedId?: string }) => <button aria-pressed={selectedId === graph.nodes[0]?.id} onClick={() => onSelect(graph.nodes[0])}>Inspect graph test node</button> }));
 
 const health: Health = { status: 'degraded', backend: 'available', falkordb: 'not_checked', graph_tool: 'fixture', llm: 'disabled', graph: 'novapay', graph_mode: 'fixture' };
@@ -21,6 +22,73 @@ beforeEach(() => { localStorage.clear(); sessionStorage.clear(); vi.mocked(getHe
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe('question workflow', () => {
+  it('runs Expert Finder, distinguishes team ownership and inspects contribution sources', async () => {
+    vi.mocked(findExperts).mockResolvedValue(expertFixture);
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Expert Finder/ }));
+    expect(await screen.findByRole('heading', { name: 'Expert Finder' })).toBeInTheDocument();
+    expect(findExperts).toHaveBeenCalledWith({ query: 'Who knows Payment Service?', limit: 5 });
+    expect(askQuestion).not.toHaveBeenCalled();
+    expect(screen.getByText('Score 9')).toBeInTheDocument();
+    expect(screen.getByText(/Personal ownership is not established/)).toBeInTheDocument();
+    expect(screen.getByText('Historical contributions')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'issue:PAY-42' }));
+    expect(screen.getByLabelText('Source inspector')).toHaveTextContent('Test-only retrieved rationale excerpt.');
+    await user.keyboard('{Escape}');
+    await user.click(within(screen.getByRole('heading', { name: '1. Alice Menon' })).getByRole('button', { name: 'Alice Menon' }));
+    expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('person:alice');
+    await user.selectOptions(screen.getByLabelText('Maximum people'), '2');
+    await user.click(screen.getByRole('button', { name: 'Find experts' }));
+    expect(findExperts).toHaveBeenLastCalledWith({ query: 'Who knows Payment Service?', limit: 2 });
+  });
+  it.each([false, true])('qualifies empty or ambiguous expert topics (ambiguous=%s)', async ambiguous => {
+    vi.mocked(findExperts).mockResolvedValue({ ...expertFixture, sources: [], support_status: 'insufficient_evidence',
+      data: { ...expertFixture.data, topics: ambiguous ? [expertFixture.graph.nodes[0], expertFixture.graph.nodes[3]] : [], experts: [] },
+      metadata: { ...expertFixture.metadata, warnings: ['Topic resolution needs a specific target.'] },
+    });
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Expert Finder/ }));
+    expect(await screen.findByText(ambiguous ? /Ambiguous topic: specify/ : /No confident topic match/)).toBeInTheDocument();
+    expect(screen.getByText(/No experts returned/)).toBeInTheDocument();
+    expect(screen.queryByText('Score 9')).not.toBeInTheDocument();
+  });
+  it('retries expert outages and preserves incomplete ranking warnings', async () => {
+    vi.mocked(findExperts).mockRejectedValue(new ApiError('Graph unavailable.', 'GRAPH_UNAVAILABLE'));
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Expert Finder/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Graph unavailable.');
+    vi.mocked(findExperts).mockResolvedValue({ ...expertFixture, support_status: 'partially_supported',
+      metadata: { ...expertFixture.metadata, warnings: ['Person evidence retrieval may be incomplete because the query reached its cap of 100 rows.'] } });
+    await user.click(screen.getByRole('button', { name: /Try again/ }));
+    expect(await screen.findByText(/Person evidence retrieval may be incomplete/)).toBeInTheDocument();
+    expect(screen.getByText('partially supported', { selector: '.support-badge' })).toBeInTheDocument();
+  });
+  it('shows missing textual provenance on graph-backed contributions', async () => {
+    const response = structuredClone(expertFixture);
+    response.sources = []; response.support_status = 'partially_supported';
+    for (const expert of response.data.experts) {
+      for (const proof of [...expert.evidence, ...expert.ownership, ...expert.historical_contributions]) proof.source_ids = [];
+    }
+    vi.mocked(findExperts).mockResolvedValue(response);
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Expert Finder/ }));
+    expect(await screen.findByText(/Graph evidence only; matching textual provenance/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'issue:PAY-42' })).not.toBeInTheDocument();
+  });
+  it('sends the three-tool showcase to the backend planner and retains source navigation', async () => {
+    const showcase = 'Why does Payment Service use Redis, who made the decision, and what would be affected if we removed it?';
+    const queryResponse: QueryResponse = { tools_used: ['trace_decision', 'impact_analysis', 'find_expert'],
+      answer: 'Decision Trace and Expert Finder: Alice approved the decision [issue:PAY-42]. Potential impact remains structural.',
+      support_status: 'partially_supported', graph: expertFixture.graph, sources: expertFixture.sources, metadata: expertFixture.metadata };
+    vi.mocked(askQuestion).mockResolvedValue(queryResponse);
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('textbox')); await user.paste(showcase); await user.keyboard('{Enter}');
+    expect(await screen.findByText(/Decision Trace and Expert Finder/)).toBeInTheDocument();
+    expect(askQuestion).toHaveBeenCalledWith(showcase);
+    expect(findExperts).not.toHaveBeenCalled(); expect(analyzeImpact).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'PAY-42' }));
+    expect(screen.getByLabelText('Source inspector')).toHaveTextContent('Test-only retrieved rationale excerpt.');
+  });
   it('renders hosted impact explanation alongside validated findings and graph inspection', async () => {
     vi.mocked(analyzeImpact).mockResolvedValue({ ...impactFixture,
       answer: 'Hosted explanation: Checkout Service could be affected; failure is not guaranteed.',

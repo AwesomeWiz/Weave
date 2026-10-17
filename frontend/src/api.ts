@@ -1,4 +1,4 @@
-import type { Health, ImpactInput, ImpactResponse, QueryResponse } from './types';
+import type { ExpertInput, ExpertResponse, Health, ImpactInput, ImpactResponse, QueryResponse } from './types';
 
 export class ApiError extends Error {
   constructor(message: string, public code = 'REQUEST_FAILED') { super(message); }
@@ -122,6 +122,44 @@ export async function analyzeImpact(request: ImpactInput): Promise<ImpactRespons
     throw new ApiError('The API returned an incompatible impact format.', 'INVALID_RESPONSE');
   }
   return response as ImpactResponse;
+}
+
+export async function findExperts(request: ExpertInput): Promise<ExpertResponse> {
+  const response = await postEvidence('/api/tools/expert-finder', request);
+  const data: unknown = (response as ExpertResponse).data;
+  const nodes = new Map(response.graph.nodes.map(n => [n.id, n]));
+  const sourceIds = new Set(response.sources.map(s => s.id));
+  const people = new Set<string>();
+  let previousScore = Infinity, previousId = '';
+  function proofs(value: unknown): boolean {
+    return Array.isArray(value) && value.every(e => record(e) && nonempty(e.category)
+      && ['team_ownership', 'decision_approval', 'decision_participation', 'commit_authorship', 'issue_assignment', 'discussion_contribution'].includes(e.category)
+      && nonempty(e.entity_id) && nodes.get(e.entity_id)?.type === e.entity_type
+      && strings(e.source_ids) && e.source_ids.every(id => sourceIds.has(id))
+      && Array.isArray(e.path) && e.path.length >= 1 && e.path.length <= 2
+      && e.path.every(p => record(p) && response.graph.edges.some(edge => edge.source === p.source && edge.type === p.type && edge.target === p.target)));
+  }
+  if (!record(data) || data.query !== request.query.trim() || !response.tools_used.includes('find_expert')
+    || !record(data.scoring) || !Object.values(data.scoring).every(n => Number.isInteger(n) && Number(n) > 0)
+    || !Array.isArray(data.topics) || !data.topics.every(t => record(t) && nonempty(t.id)
+      && JSON.stringify(t) === JSON.stringify(nodes.get(t.id)))
+    || !Array.isArray(data.experts) || data.experts.length > request.limit
+    || (data.topics.length !== 1 && data.experts.length > 0)
+    || !data.experts.every(e => {
+      if (!record(e) || !record(e.person) || !nonempty(e.person.id) || !e.person.id.startsWith('person:')
+        || people.has(e.person.id) || nodes.get(e.person.id)?.type !== 'Person'
+        || !nonempty(e.person.name) || nodes.get(e.person.id)?.properties.name !== e.person.name
+        || !(e.person.role === null || typeof e.person.role === 'string') || !Number.isInteger(e.score) || Number(e.score) < 1
+        || Number(e.score) > previousScore || (Number(e.score) === previousScore && e.person.id < previousId)
+        || !strings(e.ranking_reasons) || !proofs(e.evidence) || !(e.evidence as unknown[]).length
+        || !proofs(e.ownership) || !proofs(e.historical_contributions)
+        || !['team_membership_with_team_owned_service', 'no_current_ownership_evidence'].includes(String(e.ownership_classification))) return false;
+      people.add(e.person.id); previousScore = Number(e.score); previousId = e.person.id;
+      return true;
+    })) {
+    throw new ApiError('The API returned an incompatible Expert Finder format.', 'INVALID_RESPONSE');
+  }
+  return response as ExpertResponse;
 }
 
 export async function getHealth(): Promise<Health> {

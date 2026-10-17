@@ -102,7 +102,6 @@ def test_routing_plan_order_and_rules(question, names):
     "Why does Fraud Service use MongoDB?",
     "What depends on Payment Service and Redis?",
     "Why does Payment Service use Redis and PostgreSQL?",
-    "Who knows why Payment Service uses Redis?",  # ambiguous expert/rationale clause
     "What changed in Payment Service?",
     "What has changed in Redis?",
     "; ".join([TRACE] * 5),
@@ -202,7 +201,7 @@ def test_future_and_unknown_clauses_do_not_claim_complete_answer(database):
     context, tools = asyncio.run(execute_plan(plan, gateway))
     assert tools == ["trace_decision"] and context.status == "partially_supported"
     assert [name for name, _ in gateway.calls] == ["decision_trace", "sources"]
-    assert "Expert Finder is not implemented" in context.summary
+    assert "Expert Finder is unavailable" in context.summary
     assert "unknown or ambiguous" in context.summary
 
 
@@ -210,11 +209,11 @@ def test_future_only_intent_executes_nothing():
     class NoCalls:
         def __getattr__(self, _):
             pytest.fail("An unregistered future tool attempted to use a gateway")
-    context, tools = asyncio.run(execute_plan(plan_question("Who knows about Redis?"), NoCalls()))
+    context, tools = asyncio.run(execute_plan(plan_question("Are the docs up to date?"), NoCalls()))
     assert context.status == "insufficient_evidence" and not tools and not context.graph.nodes
     assert "not implemented or registered" in context.summary
-    assert context.per_tool["find_expert"].state == "unregistered"
-    assert context.per_tool["find_expert"].status == "insufficient_evidence"
+    assert context.per_tool["find_stale_knowledge"].state == "unregistered"
+    assert context.per_tool["find_stale_knowledge"].status == "insufficient_evidence"
 
 
 def test_missing_gateway_method_is_isolated_and_tracked(database):

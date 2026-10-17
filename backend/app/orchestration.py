@@ -10,7 +10,8 @@ from .context import build_context
 from .context_v2 import CombinedContext, ToolEvidence, ToolProvenance, merge_contexts, validate_source_records
 from .graph import GraphContractError, GraphGateway, GraphUnavailable
 from .impact import build_impact_context
-from .models import ImpactInput, ImpactResult, Source, TraceInput, TraceResult
+from .experts import build_expert_context
+from .models import ExpertInput, ExpertResult, ImpactInput, ImpactResult, Source, TraceInput, TraceResult
 from .router import RoutingPlan
 
 
@@ -41,13 +42,24 @@ def _impact(result, records, arguments):
                         "impact_analysis", context, paths)
 
 
+def _expert(result, records, arguments):
+    context, data = build_expert_context(result, records, arguments)
+    paths = tuple(tuple(next(e.id for e in context.graph.edges
+                             if (e.source, e.type, e.target) == (step.source, step.type, step.target))
+                        for step in proof.path)
+                  for person in data.experts for proof in person.evidence)
+    return ToolEvidence("find_expert", "Expert Finder", "find_expert", context, paths)
+
+
 TOOL_REGISTRY = {
     "decision_trace": ToolSpec("Decision Trace", "trace_decision", "trace_decision", TraceInput, TraceResult,
                                lambda result: result.source_ids, _trace),
     "impact_analysis": ToolSpec("Impact Analysis", "impact_analysis", "impact_analysis", ImpactInput, ImpactResult,
                                 lambda result: [s.id for s in result.sources], _impact),
+    "find_expert": ToolSpec("Expert Finder", "find_expert", "find_expert", ExpertInput, ExpertResult,
+                            lambda result: [s.id for s in result.sources], _expert),
 }
-FUTURE_TITLES = {"find_expert": "Expert Finder", "find_stale_knowledge": "Knowledge Freshness"}
+FUTURE_TITLES = {"find_stale_knowledge": "Knowledge Freshness"}
 
 
 async def execute_plan(plan: RoutingPlan, gateway: GraphGateway,

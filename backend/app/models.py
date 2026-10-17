@@ -149,3 +149,82 @@ class ImpactResult(BaseModel):
 
 class ImpactResponse(QueryResponse):
     data: ImpactData
+
+
+class ExpertInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=1, max_length=2000)
+    limit: int = Field(default=5, ge=1, le=10, strict=True)
+
+    @field_validator("query")
+    @classmethod
+    def strip_query(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Query must not be blank")
+        return value.strip()
+
+
+class ExpertPathEdge(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source: str
+    type: str
+    target: str
+
+
+class ExpertEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    category: Literal["team_ownership", "decision_approval", "decision_participation",
+                      "commit_authorship", "issue_assignment", "discussion_contribution"]
+    entity_id: str
+    entity_type: str
+    path: list[ExpertPathEdge] = Field(min_length=1, max_length=2)
+    # Derived only after independent graph and source provenance validation.
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class ExpertPerson(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str
+    name: str
+    role: str | None
+
+
+class ExpertRanking(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    person: ExpertPerson
+    evidence: list[ExpertEvidence] = Field(min_length=1, max_length=100)
+    ownership: list[ExpertEvidence] = Field(max_length=100)
+    historical_contributions: list[ExpertEvidence] = Field(max_length=100)
+    score: int = Field(ge=1)
+    ranking_reasons: list[str] = Field(max_length=100)
+    ownership_classification: Literal["team_membership_with_team_owned_service", "no_current_ownership_evidence"]
+
+
+class ExpertData(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    query: str
+    topics: list[GraphNode] = Field(max_length=20)
+    experts: list[ExpertRanking] = Field(max_length=10)
+    scoring: dict[str, int]
+
+
+class ExpertSourceReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str
+    chunk_id: str
+    title: str | None = None
+    text: str | None = None
+    url: str | None = None
+
+
+class ExpertResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    data: ExpertData
+    sources: list[ExpertSourceReference] = Field(default_factory=list, max_length=100)
+    nodes: list[GraphNode] = Field(default_factory=list, max_length=80)
+    edges: list[GraphEdge] = Field(default_factory=list, max_length=200)
+    warnings: list[str] = Field(default_factory=list, max_length=30)
+
+
+class ExpertResponse(QueryResponse):
+    data: ExpertData

@@ -31,3 +31,20 @@ export interface ImpactResponse extends QueryResponse {
   data: { entity: GraphNode | null; direct_impact: ImpactFinding[]; indirect_impact: ImpactFinding[];
     related_issues: ImpactFinding['related_issues']; related_incidents: ImpactFinding['related_incidents'] };
 }
+
+export interface ExpertInput { query: string; limit: number }
+export interface ExpertEvidence {
+  category: 'team_ownership' | 'decision_approval' | 'decision_participation' | 'commit_authorship' | 'issue_assignment' | 'discussion_contribution';
+  entity_id: string; entity_type: string;
+  path: { source: string; type: string; target: string }[];
+  source_ids: string[];
+}
+export interface ExpertRanking {
+  person: { id: string; name: string; role: string | null };
+  score: number; ranking_reasons: string[]; evidence: ExpertEvidence[];
+  ownership: ExpertEvidence[]; historical_contributions: ExpertEvidence[];
+  ownership_classification: 'team_membership_with_team_owned_service' | 'no_current_ownership_evidence';
+}
+export interface ExpertResponse extends QueryResponse {
+  data: { query: string; topics: GraphNode[]; experts: ExpertRanking[]; scoring: Record<string, number> };
+}

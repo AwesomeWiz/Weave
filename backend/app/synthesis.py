@@ -85,7 +85,7 @@ def single_tool_context(context: EvidenceContext, tool: str, data: ImpactData | 
                                  if (e.source, e.type, e.target) == (p.source, p.type, p.target))
                             for p in finding.path_edges)
                       for finding in data.direct_impact + data.indirect_impact)
-    title = "Decision Trace" if tool == "decision_trace" else "Impact Analysis"
+    title = {"decision_trace": "Decision Trace", "impact_analysis": "Impact Analysis", "find_expert": "Expert Finder"}[tool]
     return merge_contexts([ToolEvidence(tool, title, "trace_decision" if tool == "decision_trace"
                                        else tool, context, paths)])
 
@@ -99,7 +99,7 @@ def prepare_synthesis(context: CombinedContext) -> SynthesisPacket:
     for tool, provenance in context.per_tool.items():
         if provenance.state != "validated":
             continue
-        if tool not in {"decision_trace", "impact_analysis"}:
+        if tool not in {"decision_trace", "impact_analysis", "find_expert"}:
             raise ValueError("Capability has no grounded presentation renderer")
         if not provenance.summary:
             raise ValueError("Missing tool-local validated narrative")
@@ -137,8 +137,9 @@ def prepare_synthesis(context: CombinedContext) -> SynthesisPacket:
         for text in (recorded, explanation):
             cited = list(dict.fromkeys(re.findall(r"\[([^\]]+)\]", text)))
             validate_citations(text, cited, allowed, require_every_paragraph=False, allow_empty=True)
-        blocks.append(SynthesisBlock(f"b{len(blocks)}", "Historical decision evidence" if tool == "decision_trace"
-                                     else "Current relationships and potential impact", {
+        blocks.append(SynthesisBlock(f"b{len(blocks)}", {"decision_trace": "Historical decision evidence",
+                                     "impact_analysis": "Current relationships and potential impact",
+                                     "find_expert": "Evidence-backed expert rankings"}[tool], {
                                          "recorded": recorded, "explanation": explanation}))
     if not blocks or len(blocks) > 4:
         raise ValueError("No bounded synthesis sections")

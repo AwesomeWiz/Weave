@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from .config import Settings
 from .graph import GraphContractError
-from .models import ImpactInput, ImpactResult, TraceInput, TraceResult
+from .models import ExpertInput, ExpertResult, ImpactInput, ImpactResult, TraceInput, TraceResult
 
 
 def normalize_impact(payload: dict) -> ImpactResult:
@@ -13,6 +13,13 @@ def normalize_impact(payload: dict) -> ImpactResult:
         return ImpactResult.model_validate(payload)
     except (TypeError, ValueError, ValidationError) as exc:
         raise GraphContractError("Invalid teammate impact analysis") from exc
+
+
+def normalize_experts(payload: dict) -> ExpertResult:
+    try:
+        return ExpertResult.model_validate(payload)
+    except (TypeError, ValueError, ValidationError) as exc:
+        raise GraphContractError("Invalid teammate expert finder") from exc
 
 
 def normalize_trace(payload: dict) -> TraceResult:
@@ -114,6 +121,17 @@ class AntonyGateway:
             finally:
                 client.close()
         return normalize_impact(await asyncio.to_thread(retrieve))
+
+    async def find_expert(self, query: ExpertInput) -> ExpertResult:
+        from weave_graph.experts import find_expert
+
+        def retrieve():
+            client = self._client()
+            try:
+                return find_expert(client, query.query, limit=query.limit)
+            finally:
+                client.close()
+        return normalize_experts(await asyncio.to_thread(retrieve))
 
 
 def create_gateway(settings: Settings) -> AntonyGateway:
