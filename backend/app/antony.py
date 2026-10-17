@@ -5,7 +5,14 @@ from pydantic import ValidationError
 
 from .config import Settings
 from .graph import GraphContractError
-from .models import TraceInput, TraceResult
+from .models import ImpactInput, ImpactResult, TraceInput, TraceResult
+
+
+def normalize_impact(payload: dict) -> ImpactResult:
+    try:
+        return ImpactResult.model_validate(payload)
+    except (TypeError, ValueError, ValidationError) as exc:
+        raise GraphContractError("Invalid teammate impact analysis") from exc
 
 
 def normalize_trace(payload: dict) -> TraceResult:
@@ -96,6 +103,17 @@ class AntonyGateway:
     async def find_sources(self, source_ids: list[str]):
         from .sources import WeaveDataSourceRetriever
         return await WeaveDataSourceRetriever(self.settings).find_sources(source_ids)
+
+    async def impact_analysis(self, query: ImpactInput) -> ImpactResult:
+        from weave_graph.impact import impact_analysis
+
+        def retrieve():
+            client = self._client()
+            try:
+                return impact_analysis(client, query.entity_id, max_depth=query.max_depth)
+            finally:
+                client.close()
+        return normalize_impact(await asyncio.to_thread(retrieve))
 
 
 def create_gateway(settings: Settings) -> AntonyGateway:

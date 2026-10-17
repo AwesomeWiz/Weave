@@ -9,7 +9,7 @@ from typing import Protocol
 from pydantic import TypeAdapter, ValidationError
 
 from .config import Settings
-from .models import Source, TraceInput, TraceResult
+from .models import ImpactInput, ImpactResult, Source, TraceInput, TraceResult
 
 
 class GraphUnavailable(Exception):
@@ -31,6 +31,8 @@ class GraphGateway(SourceRetriever, Protocol):
 
     async def trace_decision(self, query: TraceInput) -> TraceResult: ...
 
+    async def impact_analysis(self, query: ImpactInput) -> ImpactResult: ...
+
 
 class FixtureGateway:
     """Explicit development data, never a fallback from real mode."""
@@ -50,6 +52,14 @@ class FixtureGateway:
 
     async def find_sources(self, source_ids: list[str]) -> list[Source]:
         return [s.model_copy(deep=True) for s in self.sources if s.id in source_ids]
+
+    async def impact_analysis(self, query: ImpactInput) -> ImpactResult:
+        # Precomputed, explicitly synthetic examples. Never query the local corpus.
+        path = Path(__file__).parent / "fixtures" / "impact.development.json"
+        examples = json.loads(path.read_text(encoding="utf-8"))
+        payload = examples.get(f"{query.entity_id}/{query.max_depth}")
+        return ImpactResult.model_validate(payload) if payload else ImpactResult(
+            data={}, warnings=["No development impact example exists for this target."])
 
 
 class FalkorGateway:
@@ -139,6 +149,21 @@ class FalkorGateway:
             return TypeAdapter(list[Source]).validate_python(records)
         except ValidationError as exc:
             raise GraphContractError("Invalid source records") from exc
+
+    async def impact_analysis(self, query: ImpactInput) -> ImpactResult:
+        method = getattr(self.delegate, "impact_analysis", None)
+        if not inspect.iscoroutinefunction(method):
+            raise GraphUnavailable()
+        try:
+            result = await asyncio.wait_for(method(query), timeout=15)
+        except GraphContractError:
+            raise
+        except Exception as exc:
+            raise GraphUnavailable() from exc
+        try:
+            return ImpactResult.model_validate(result)
+        except ValidationError as exc:
+            raise GraphContractError("Invalid impact result") from exc
 
 
 def create_gateway(settings: Settings) -> GraphGateway:

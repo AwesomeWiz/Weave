@@ -1,4 +1,4 @@
-import type { Health, QueryResponse } from './types';
+import type { Health, ImpactInput, ImpactResponse, QueryResponse } from './types';
 
 export class ApiError extends Error {
   constructor(message: string, public code = 'REQUEST_FAILED') { super(message); }
@@ -45,12 +45,12 @@ function validEvidence(data: Record<string, unknown>): boolean {
     && strings(data.metadata.warnings) && ['deterministic', 'ollama'].includes(String(data.metadata.generation));
 }
 
-export async function askQuestion(question: string): Promise<QueryResponse> {
+async function postEvidence(path: string, body: unknown): Promise<QueryResponse> {
   let response: Response;
   try {
-    response = await fetch(`${base}/api/query`, {
+    response = await fetch(`${base}${path}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, session_id: 'weave-browser' }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(120_000),
     });
   } catch (error) {
@@ -75,6 +75,53 @@ export async function askQuestion(question: string): Promise<QueryResponse> {
     throw new ApiError('The API returned an incompatible evidence format.', 'INVALID_RESPONSE');
   }
   return data as unknown as QueryResponse;
+}
+
+export function askQuestion(question: string): Promise<QueryResponse> {
+  return postEvidence('/api/query', { question, session_id: 'weave-browser' });
+}
+
+export async function analyzeImpact(request: ImpactInput): Promise<ImpactResponse> {
+  const response = await postEvidence('/api/tools/impact-analysis', request);
+  const data: unknown = (response as ImpactResponse).data;
+  const ids = new Map(response.graph.nodes.map(n => [n.id, n]));
+  const citations = new Set(response.sources.map(s => s.id));
+  const seen = new Set<string>();
+  function related(value: unknown): boolean {
+    return Array.isArray(value) && value.every(item => record(item) && nonempty(item.id)
+      && ids.has(item.id) && typeof item.title === 'string' && nonempty(item.service_id) && record(item.properties));
+  }
+  function findings(value: unknown, type: 'direct' | 'indirect'): boolean {
+    return Array.isArray(value) && value.every(f => {
+      if (!record(f) || !nonempty(f.service_id) || seen.has(f.service_id) || f.service_id === request.entity_id
+        || ids.get(f.service_id)?.type !== 'Service' || !record(f.service)
+        || f.impact_type !== type || !Number.isInteger(f.impact_depth) || Number(f.impact_depth) < 1
+        || Number(f.impact_depth) > request.max_depth || (Number(f.impact_depth) === 1) !== (type === 'direct')
+        || !strings(f.path) || f.path.length !== Number(f.impact_depth) + 1
+        || new Set(f.path).size !== f.path.length || f.path.some(id => !ids.has(id))
+        || f.path[0] !== request.entity_id || f.path.at(-1) !== f.service_id
+        || !Array.isArray(f.path_edges) || f.path_edges.length !== f.impact_depth
+        || !f.path_edges.every((edge, index) => record(edge)
+          && edge.source === (f.path as string[])[index + 1] && edge.target === (f.path as string[])[index]
+          && edge.type === (index === 0 && ids.get(request.entity_id)?.type === 'Technology' ? 'USES' : 'DEPENDS_ON')
+          && response.graph.edges.some(e => e.source === edge.source && e.type === edge.type && e.target === edge.target))
+        || !Array.isArray(f.owners) || !f.owners.every(owner => record(owner) && nonempty(owner.id)
+          && ids.has(owner.id) && typeof owner.name === 'string'
+          && response.graph.edges.some(e => e.source === owner.id && e.type === 'OWNS' && e.target === f.service_id))
+        || !strings(f.source_ids) || !f.source_ids.every(id => citations.has(id))
+        || !related(f.related_issues) || !related(f.related_incidents)) return false;
+      seen.add(f.service_id);
+      return true;
+    });
+  }
+  if (!record(data) || !response.tools_used.includes('impact_analysis')
+    || (data.entity !== null && (!record(data.entity) || data.entity.id !== request.entity_id || !ids.has(request.entity_id)))
+    || !findings(data.direct_impact, 'direct') || !findings(data.indirect_impact, 'indirect')
+    || !related(data.related_issues) || !related(data.related_incidents)
+    || (data.entity === null && response.graph.nodes.length > 0)) {
+    throw new ApiError('The API returned an incompatible impact format.', 'INVALID_RESPONSE');
+  }
+  return response as ImpactResponse;
 }
 
 export async function getHealth(): Promise<Health> {

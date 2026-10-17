@@ -1,8 +1,8 @@
-# Weave — Phase 1
+# Weave
 
-Company decision intelligence: React → FastAPI → deterministic decision router → graph/source adapter → Context Builder → grounded explanation → sources and an interactive evidence graph.
+Company decision intelligence: React → FastAPI → deterministic tool router → graph/source adapter → Context Builder → grounded explanation → sources and an interactive evidence graph.
 
-**Development mode works end to end using explicitly labeled synthetic fixtures. Alen's merged `weave_data` source retrieval is connected through the backend adapter, with offline verification. Live database verification and Antony's decision-trace tool remain pending.** Real mode never falls back to fixtures, local source files or an in-memory graph.
+**Decision Trace and Phase 2 Impact Analysis are integrated with Antony's graph tools and Alen's `weave_data` retrieval. Offline verification passes; live FalkorDB verification remains required on this machine.** Development mode uses explicitly labeled synthetic fixtures. Real mode never falls back to fixtures, local source files or an in-memory graph. See the [Phase 2 handoff](docs/PHASE2_IMPACT_HANDOFF.md) for API schemas, verification results and QA limitations.
 
 ## Install
 
@@ -52,14 +52,16 @@ Set these in `.env` and restart FastAPI (clear any conflicting shell environment
 
 ```dotenv
 WEAVE_GRAPH_MODE=falkordb
-WEAVE_GRAPH_FACTORY=your_package.weave_adapter:create_gateway
+WEAVE_GRAPH_FACTORY=app.antony:create_gateway
 WEAVE_SOURCE_BACKEND=weave_data
 WEAVE_GRAPH_NAME=novapay
 WEAVE_FALKORDB_HOST=localhost
 WEAVE_FALKORDB_PORT=6379
 ```
 
-The factory provides actual async `trace_decision` and graph-tool health. With `WEAVE_SOURCE_BACKEND=weave_data`, the backend independently uses Alen's persisted source retrieval; with `delegate`, the factory also provides `find_sources`. See [the current integration handoff](docs/REAL_INTEGRATION_HANDOFF.md) for parent source IDs, chunk provenance, source-only smoke testing and remaining trace/rationale blockers. No teammate Cypher was duplicated here.
+The factory provides async `trace_decision`, `impact_analysis` and graph-tool health through the existing `weave_graph` namespace. With `WEAVE_SOURCE_BACKEND=weave_data`, the backend independently uses Alen's persisted source retrieval; with `delegate`, the factory also provides `find_sources`. See [the Phase 1 integration handoff](docs/REAL_INTEGRATION_HANDOFF.md) for source IDs and chunk provenance, and the [Phase 2 handoff](docs/PHASE2_IMPACT_HANDOFF.md) for impact semantics. No teammate Cypher was duplicated here.
+
+Select **Impact Analysis** or ask **What depends on Payment Service?** The dedicated `POST /api/tools/impact-analysis` endpoint accepts `{"entity_id":"service:payment-service","max_depth":2}`. The UI shows direct and potential downstream findings, actual directed paths, available owners and related sources. Depth is 1–3, including the technology `USES` hop. Structural impact remains `partially_supported`; a related historical issue does not prove failure propagation. `/api/query` retains its original response schema.
 
 Without that implementation, the primary query returns HTTP **503 / GRAPH_UNAVAILABLE**. Health separately checks actual FalkorDB graph availability and tool availability; a reachable database alone is insufficient. The health probe only uses `GRAPH.LIST` and a bounded read-only graph query.
 
@@ -80,12 +82,14 @@ Restart FastAPI. Health checks that the exact model is present. Generation uses 
 
 ```powershell
 $env:PYTHONPATH = 'backend;.'
-.\.venv\Scripts\python.exe -m pytest backend\tests tests -q --basetemp=.local/pytest-check
+$env:WEAVE_SOURCE_BACKEND = 'delegate' # isolate offline doubles from local .env configuration
+.\.venv\Scripts\python.exe -m pytest backend\tests tests app\graph -q --basetemp=.local/pytest-check
 .\.venv\Scripts\python.exe -m ruff check --config backend\pyproject.toml backend
 npm.cmd --prefix frontend test
 npm.cmd --prefix frontend run lint
 npm.cmd --prefix frontend run typecheck
 npm.cmd --prefix frontend run build
+Remove-Item Env:WEAVE_SOURCE_BACKEND # restore .env selection for the app
 ```
 
 The optional real integration test is skipped by default. Once the real adapter and seeded graph are available:

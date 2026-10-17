@@ -13,11 +13,12 @@ Tests:
 """
 
 from pathlib import Path
+import os
 
 import pytest
 
-from app.graph.client import GraphClient
-from app.graph.impact import impact_analysis
+from weave_graph.client import GraphClient
+from weave_graph.impact import impact_analysis
 from weave_data.graph_adapter import InMemoryGraphAdapter
 from weave_data.ingest import run_ingestion
 
@@ -38,6 +39,8 @@ def seeded_graph():
 
 @pytest.fixture
 def live_client():
+    if os.getenv("WEAVE_RUN_REAL_IMPACT") != "1":
+        pytest.skip("Set WEAVE_RUN_REAL_IMPACT=1 with a seeded novapay FalkorDB")
     client = GraphClient(graph_name="novapay")
 
     try:

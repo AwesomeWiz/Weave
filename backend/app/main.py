@@ -10,7 +10,8 @@ from .config import Settings
 from .context import build_context
 from .graph import FalkorGateway, GraphContractError, GraphGateway, GraphUnavailable, create_gateway
 from .llm import LLMProvider, create_provider
-from .models import HealthResponse, Metadata, QueryRequest, QueryResponse
+from .impact import build_impact_context
+from .models import HealthResponse, ImpactInput, ImpactResponse, Metadata, QueryRequest, QueryResponse
 from .router import route_question
 
 
@@ -31,6 +32,9 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request, _error):
+        if _request.url.path == "/api/tools/impact-analysis":
+            return error_response("INVALID_REQUEST", "Use a canonical service: or tech: entity ID "
+                                  "and an integer max_depth between 1 and 3.", 422)
         return error_response("INVALID_REQUEST", "Enter a question of 1–2,000 characters; "
                               "session_id must be at most 128 characters.", 422)
 
@@ -73,16 +77,41 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
         )
         return JSONResponse(status_code=503 if critical else 200, content=result.model_dump())
 
+    async def run_impact(request: ImpactInput) -> ImpactResponse:
+        start = time.perf_counter()
+        result = await graph.impact_analysis(request)
+        try:
+            records = await graph.find_sources(list(dict.fromkeys(s.id for s in result.sources)))
+        except GraphUnavailable:
+            records = []
+            result.warnings.append("Source retrieval is unavailable; graph evidence was retained.")
+        context, data = build_impact_context(result, records, request)
+        if config.graph_mode == "fixture":
+            context.warnings.insert(0, "Development fixture — synthetic evidence, not live FalkorDB data.")
+        return ImpactResponse(
+            answer=context.summary, support_status=context.status, tools_used=["impact_analysis"],
+            sources=context.sources, graph=context.graph, data=data,
+            metadata=Metadata(latency_ms=round((time.perf_counter() - start) * 1000),
+                              graph_mode=config.graph_mode, warnings=context.warnings),
+        )
+
+    @app.post("/api/tools/impact-analysis", response_model=ImpactResponse)
+    async def impact_analysis(request: ImpactInput):
+        return await run_impact(request)
+
     @app.post("/api/query", response_model=QueryResponse)
     async def query(request: QueryRequest):
         start = time.perf_counter()
         metadata = Metadata(latency_ms=0, graph_mode=config.graph_mode)
         target = route_question(request.question)
+        if isinstance(target, ImpactInput):
+            response = await run_impact(target)
+            return QueryResponse.model_validate(response.model_dump(exclude={"data"}))
         if not target:
             metadata.latency_ms = round((time.perf_counter() - start) * 1000)
             return QueryResponse(
-                answer="Phase 1 traces the Payment Service / Redis decision. "
-                       "Try: Why does Payment Service use Redis? "
+                answer="Weave supports Decision Trace and single-target Impact Analysis. "
+                       "Try: Why does Payment Service use Redis? Or: What depends on Payment Service? "
                        "Other questions do not yet have a supported retrieval route.",
                 support_status="insufficient_evidence", tools_used=[], metadata=metadata,
             )

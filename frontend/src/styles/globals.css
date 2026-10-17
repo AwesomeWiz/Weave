@@ -189,3 +189,25 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
   .relationship-table code { white-space: normal; overflow-wrap: anywhere; }
   .detail-header { margin: -16px -13px 0; padding: 16px 13px; }
 }
+/* Impact Analysis uses the existing paper, forest, and evidence components. */
+.impact-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px; margin: 0 0 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.impact-controls label { display: grid; gap: 6px; color: var(--text-muted); font-size: 12px; }
+.impact-controls select { min-height: 38px; max-width: 100%; padding: 7px 30px 7px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); background: var(--surface); font: inherit; font-size: 14px; }
+.impact-controls select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.impact-results h2 { font-size: 22px; margin: 6px 0 18px; }
+.impact-target { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.impact-target > .small { flex-basis: 100%; }
+.impact-target code, .impact-id { overflow-wrap: anywhere; font-size: 11px; color: var(--text-muted); }
+.impact-entity { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--brand-800); font-weight: 500; text-align: left; }
+.impact-entity:hover { text-decoration: underline; }
+.impact-caution { padding: 12px 14px; border-radius: 10px; background: var(--brand-075); font-size: 13px; line-height: 1.6; }
+.impact-section { margin-top: 22px; }
+.impact-section h3 { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; font-size: 15px; }
+.impact-finding { padding: 14px; margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; }
+.impact-path { margin: 10px 0; font-size: 12px; overflow-wrap: anywhere; }
+.impact-path p { margin: 5px 0; line-height: 1.8; }
+.impact-path .impact-entity { font-size: 12px; }
+.impact-owners { margin: 12px 0 8px; font-size: 12px; }
+.impact-sources { display: flex; flex-wrap: wrap; gap: 8px; }
+.impact-finding .button[aria-pressed="true"] { background: var(--brand-075); border-color: var(--brand-800); }
+@media (max-width: 600px) { .impact-controls label { flex: 1 1 130px; } .impact-controls .button { width: 100%; justify-content: center; } .impact-finding { padding: 11px; } }

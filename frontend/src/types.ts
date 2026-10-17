@@ -17,3 +17,17 @@ export interface Health {
   falkordb: 'connected' | 'unavailable' | 'not_checked'; graph_tool: 'available' | 'unavailable' | 'fixture';
   llm: 'available' | 'unavailable' | 'disabled'; graph: string; graph_mode: GraphMode;
 }
+
+export interface ImpactInput { entity_id: string; max_depth: number }
+export interface ImpactFinding {
+  service_id: string; service: Record<string, unknown>; impact_depth: number; impact_type: 'direct' | 'indirect';
+  path: string[]; path_edges: { source: string; type: 'DEPENDS_ON' | 'USES'; target: string }[];
+  owners: { id: string; name: string }[];
+  related_issues: { id: string; title: string; service_id: string; properties: Record<string, unknown> }[];
+  related_incidents: { id: string; title: string; service_id: string; properties: Record<string, unknown> }[];
+  source_ids: string[];
+}
+export interface ImpactResponse extends QueryResponse {
+  data: { entity: GraphNode | null; direct_impact: ImpactFinding[]; indirect_impact: ImpactFinding[];
+    related_issues: ImpactFinding['related_issues']; related_incidents: ImpactFinding['related_incidents'] };
+}

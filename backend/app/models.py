@@ -86,3 +86,66 @@ class HealthResponse(BaseModel):
     llm: Literal["available", "unavailable", "disabled"]
     graph: str
     graph_mode: Literal["fixture", "falkordb"]
+
+
+class ImpactInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entity_id: str = Field(pattern=r"^(service|tech):[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=128)
+    max_depth: int = Field(default=2, ge=1, le=3, strict=True)
+
+
+class ImpactPathEdge(BaseModel):
+    source: str
+    type: Literal["DEPENDS_ON", "USES"]
+    target: str
+
+
+class ImpactOwner(BaseModel):
+    id: str
+    name: str
+
+
+class ImpactRelated(BaseModel):
+    id: str
+    title: str
+    properties: dict[str, Any]
+    service_id: str
+
+
+class ImpactFinding(BaseModel):
+    service_id: str
+    service: dict[str, Any]
+    impact_depth: int = Field(ge=1, le=3, strict=True)
+    impact_type: Literal["direct", "indirect"]
+    path: list[str]
+    path_edges: list[ImpactPathEdge]
+    owners: list[ImpactOwner] = Field(default_factory=list)
+    related_issues: list[ImpactRelated] = Field(default_factory=list)
+    related_incidents: list[ImpactRelated] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class ImpactData(BaseModel):
+    entity: GraphNode | None = None
+    direct_impact: list[ImpactFinding] = Field(default_factory=list)
+    indirect_impact: list[ImpactFinding] = Field(default_factory=list)
+    related_issues: list[ImpactRelated] = Field(default_factory=list)
+    related_incidents: list[ImpactRelated] = Field(default_factory=list)
+
+
+class GraphSourceReference(BaseModel):
+    id: str = Field(min_length=1)
+    chunk_id: str | None = None
+
+
+class ImpactResult(BaseModel):
+    """Common teammate graph-tool envelope, with typed Impact Analysis data."""
+    data: ImpactData
+    sources: list[GraphSourceReference] = Field(default_factory=list, max_length=40)
+    nodes: list[GraphNode] = Field(default_factory=list, max_length=60)
+    edges: list[GraphEdge] = Field(default_factory=list, max_length=160)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ImpactResponse(QueryResponse):
+    data: ImpactData

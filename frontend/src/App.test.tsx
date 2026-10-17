@@ -2,10 +2,11 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { ApiError, askQuestion, getHealth } from './api';
+import { analyzeImpact, ApiError, askQuestion, getHealth } from './api';
+import { impactFixture } from './test/impactFixture';
 import type { Health, QueryResponse } from './types';
 
-vi.mock('./api', async importOriginal => ({ ...await importOriginal<typeof import('./api')>(), askQuestion: vi.fn(), getHealth: vi.fn() }));
+vi.mock('./api', async importOriginal => ({ ...await importOriginal<typeof import('./api')>(), askQuestion: vi.fn(), analyzeImpact: vi.fn(), getHealth: vi.fn() }));
 vi.mock('./components/EvidenceGraph', () => ({ default: ({ onSelect, graph, selectedId }: { onSelect: (n: QueryResponse['graph']['nodes'][number]) => void; graph: QueryResponse['graph']; selectedId?: string }) => <button aria-pressed={selectedId === graph.nodes[0]?.id} onClick={() => onSelect(graph.nodes[0])}>Inspect graph test node</button> }));
 
 const health: Health = { status: 'degraded', backend: 'available', falkordb: 'not_checked', graph_tool: 'fixture', llm: 'disabled', graph: 'novapay', graph_mode: 'fixture' };
@@ -20,6 +21,33 @@ beforeEach(() => { localStorage.clear(); sessionStorage.clear(); vi.mocked(getHe
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe('question workflow', () => {
+  it('runs Impact Analysis from the card, separates findings, and inspects a highlighted path', async () => {
+    vi.mocked(analyzeImpact).mockResolvedValue(impactFixture);
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Impact Analysis/ }));
+    expect(await screen.findByRole('heading', { name: 'Impact Analysis' })).toBeInTheDocument();
+    expect(analyzeImpact).toHaveBeenCalledWith({ entity_id: 'service:payment-service', max_depth: 2 });
+    expect(askQuestion).not.toHaveBeenCalled();
+    expect(within(screen.getByRole('region', { name: 'Direct Impact' })).getByText('service:checkout-service')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Potential Downstream Impact' })).getByText('service:order-service')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Direct Impact' })).queryByText('service:payment-service')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Highlight path to Order Service' }));
+    expect(screen.getByRole('button', { name: 'Highlight path to Order Service' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('service:order-service');
+    await user.selectOptions(screen.getByLabelText('Traversal depth'), '1');
+    await user.click(screen.getByRole('button', { name: 'Analyze impact' }));
+    expect(analyzeImpact).toHaveBeenLastCalledWith({ entity_id: 'service:payment-service', max_depth: 1 });
+  });
+  it('routes natural impact questions and retries with the selected target and depth', async () => {
+    vi.mocked(analyzeImpact).mockRejectedValue(new ApiError('No graph connection.', 'GRAPH_UNAVAILABLE'));
+    const user = userEvent.setup(); render(<App />);
+    await user.type(screen.getByRole('textbox'), 'What services would be impacted if Redis were removed?{Enter}');
+    expect(await screen.findByRole('alert')).toHaveTextContent('No graph connection.');
+    expect(analyzeImpact).toHaveBeenCalledWith({ entity_id: 'tech:redis', max_depth: 2 });
+    await user.click(screen.getByRole('button', { name: /Try again/ }));
+    expect(analyzeImpact).toHaveBeenCalledTimes(2);
+    expect(askQuestion).not.toHaveBeenCalled();
+  });
   it('submits on Enter and renders labeled fixture evidence and citation inspector', async () => {
     vi.mocked(askQuestion).mockResolvedValue(result);
     const user = userEvent.setup();

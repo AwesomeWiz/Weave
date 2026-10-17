@@ -1,0 +1,665 @@
+{
+  "service:payment-service/1": {
+    "data": {
+      "entity": {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [
+        {
+          "service_id": "service:checkout-service",
+          "service": {
+            "description": "Checkout flow for NovaPay.",
+            "dataset": "development_fixture"
+          },
+          "impact_depth": 1,
+          "impact_type": "direct",
+          "path": [
+            "service:payment-service",
+            "service:checkout-service"
+          ],
+          "path_edges": [
+            {
+              "source": "service:checkout-service",
+              "type": "DEPENDS_ON",
+              "target": "service:payment-service"
+            }
+          ],
+          "owners": [],
+          "related_issues": [],
+          "related_incidents": []
+        }
+      ],
+      "indirect_impact": [],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "service:checkout-service|DEPENDS_ON|service:payment-service",
+        "source": "service:checkout-service",
+        "type": "DEPENDS_ON",
+        "target": "service:payment-service",
+        "properties": {
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  },
+  "service:payment-service/2": {
+    "data": {
+      "entity": {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [
+        {
+          "service_id": "service:checkout-service",
+          "service": {
+            "description": "Checkout flow for NovaPay.",
+            "dataset": "development_fixture"
+          },
+          "impact_depth": 1,
+          "impact_type": "direct",
+          "path": [
+            "service:payment-service",
+            "service:checkout-service"
+          ],
+          "path_edges": [
+            {
+              "source": "service:checkout-service",
+              "type": "DEPENDS_ON",
+              "target": "service:payment-service"
+            }
+          ],
+          "owners": [],
+          "related_issues": [],
+          "related_incidents": []
+        }
+      ],
+      "indirect_impact": [],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "service:checkout-service|DEPENDS_ON|service:payment-service",
+        "source": "service:checkout-service",
+        "type": "DEPENDS_ON",
+        "target": "service:payment-service",
+        "properties": {
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  },
+  "service:payment-service/3": {
+    "data": {
+      "entity": {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [
+        {
+          "service_id": "service:checkout-service",
+          "service": {
+            "description": "Checkout flow for NovaPay.",
+            "dataset": "development_fixture"
+          },
+          "impact_depth": 1,
+          "impact_type": "direct",
+          "path": [
+            "service:payment-service",
+            "service:checkout-service"
+          ],
+          "path_edges": [
+            {
+              "source": "service:checkout-service",
+              "type": "DEPENDS_ON",
+              "target": "service:payment-service"
+            }
+          ],
+          "owners": [],
+          "related_issues": [],
+          "related_incidents": []
+        }
+      ],
+      "indirect_impact": [],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "service:checkout-service|DEPENDS_ON|service:payment-service",
+        "source": "service:checkout-service",
+        "type": "DEPENDS_ON",
+        "target": "service:payment-service",
+        "properties": {
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  },
+  "tech:redis/1": {
+    "data": {
+      "entity": {
+        "id": "tech:redis",
+        "type": "Technology",
+        "label": "Redis",
+        "properties": {
+          "category": "Cache",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [
+        {
+          "service_id": "service:payment-service",
+          "service": {
+            "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+            "criticality": "High",
+            "dataset": "development_fixture"
+          },
+          "impact_depth": 1,
+          "impact_type": "direct",
+          "path": [
+            "tech:redis",
+            "service:payment-service"
+          ],
+          "path_edges": [
+            {
+              "source": "service:payment-service",
+              "type": "USES",
+              "target": "tech:redis"
+            }
+          ],
+          "owners": [],
+          "related_issues": [],
+          "related_incidents": []
+        }
+      ],
+      "indirect_impact": [],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "tech:redis",
+        "type": "Technology",
+        "label": "Redis",
+        "properties": {
+          "category": "Cache",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "service:payment-service|USES|tech:redis",
+        "source": "service:payment-service",
+        "type": "USES",
+        "target": "tech:redis",
+        "properties": {
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  },
+  "tech:redis/2": {
+    "data": {
+      "entity": {
+        "id": "tech:redis",
+        "type": "Technology",
+        "label": "Redis",
+        "properties": {
+          "category": "Cache",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [
+        {
+          "service_id": "service:payment-service",
+          "service": {
+            "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+            "criticality": "High",
+            "dataset": "development_fixture"
+          },
+          "impact_depth": 1,
+          "impact_type": "direct",
+          "path": [
+            "tech:redis",
+            "service:payment-service"
+          ],
+          "path_edges": [
+            {
+              "source": "service:payment-service",
+              "type": "USES",
+              "target": "tech:redis"
+            }
+          ],
+          "owners": [],
+          "related_issues": [],
+          "related_incidents": []
+        }
+      ],
+      "indirect_impact": [
+        {
+          "service_id": "service:checkout-service",
+          "service": {
+            "description": "Checkout flow for NovaPay.",
+            "dataset": "development_fixture"
+          },
+          "impact_depth": 2,
+          "impact_type": "indirect",
+          "path": [
+            "tech:redis",
+            "service:payment-service",
+            "service:checkout-service"
+          ],
+          "path_edges": [
+            {
+              "source": "service:payment-service",
+              "type": "USES",
+              "target": "tech:redis"
+            },
+            {
+              "source": "service:checkout-service",
+              "type": "DEPENDS_ON",
+              "target": "service:payment-service"
+            }
+          ],
+          "owners": [],
+          "related_issues": [],
+          "related_incidents": []
+        }
+      ],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "tech:redis",
+        "type": "Technology",
+        "label": "Redis",
+        "properties": {
+          "category": "Cache",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "service:payment-service|USES|tech:redis",
+        "source": "service:payment-service",
+        "type": "USES",
+        "target": "tech:redis",
+        "properties": {
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "service:checkout-service|DEPENDS_ON|service:payment-service",
+        "source": "service:checkout-service",
+        "type": "DEPENDS_ON",
+        "target": "service:payment-service",
+        "properties": {
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  },
+  "tech:redis/3": {
+    "data": {
+      "entity": {
+        "id": "tech:redis",
+        "type": "Technology",
+        "label": "Redis",
+        "properties": {
+          "category": "Cache",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [
+        {
+          "service_id": "service:payment-service",
+          "service": {
+            "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+            "criticality": "High",
+            "dataset": "development_fixture"
+          },
+          "impact_depth": 1,
+          "impact_type": "direct",
+          "path": [
+            "tech:redis",
+            "service:payment-service"
+          ],
+          "path_edges": [
+            {
+              "source": "service:payment-service",
+              "type": "USES",
+              "target": "tech:redis"
+            }
+          ],
+          "owners": [],
+          "related_issues": [],
+          "related_incidents": []
+        }
+      ],
+      "indirect_impact": [
+        {
+          "service_id": "service:checkout-service",
+          "service": {
+            "description": "Checkout flow for NovaPay.",
+            "dataset": "development_fixture"
+          },
+          "impact_depth": 2,
+          "impact_type": "indirect",
+          "path": [
+            "tech:redis",
+            "service:payment-service",
+            "service:checkout-service"
+          ],
+          "path_edges": [
+            {
+              "source": "service:payment-service",
+              "type": "USES",
+              "target": "tech:redis"
+            },
+            {
+              "source": "service:checkout-service",
+              "type": "DEPENDS_ON",
+              "target": "service:payment-service"
+            }
+          ],
+          "owners": [],
+          "related_issues": [],
+          "related_incidents": []
+        }
+      ],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "service:payment-service",
+        "type": "Service",
+        "label": "Payment Service",
+        "properties": {
+          "description": "Payment processing service used by checkout. Handles transactions, refunds and payment method integrations.",
+          "criticality": "High",
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "tech:redis",
+        "type": "Technology",
+        "label": "Redis",
+        "properties": {
+          "category": "Cache",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "service:payment-service|USES|tech:redis",
+        "source": "service:payment-service",
+        "type": "USES",
+        "target": "tech:redis",
+        "properties": {
+          "dataset": "development_fixture"
+        }
+      },
+      {
+        "id": "service:checkout-service|DEPENDS_ON|service:payment-service",
+        "source": "service:checkout-service",
+        "type": "DEPENDS_ON",
+        "target": "service:payment-service",
+        "properties": {
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  },
+  "service:checkout-service/1": {
+    "data": {
+      "entity": {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [],
+      "indirect_impact": [],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  },
+  "service:checkout-service/2": {
+    "data": {
+      "entity": {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [],
+      "indirect_impact": [],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  },
+  "service:checkout-service/3": {
+    "data": {
+      "entity": {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      },
+      "direct_impact": [],
+      "indirect_impact": [],
+      "related_issues": [],
+      "related_incidents": []
+    },
+    "nodes": [
+      {
+        "id": "service:checkout-service",
+        "type": "Service",
+        "label": "Checkout Service",
+        "properties": {
+          "description": "Checkout flow for NovaPay.",
+          "dataset": "development_fixture"
+        }
+      }
+    ],
+    "edges": [],
+    "sources": [],
+    "warnings": [
+      "Development fixture: precomputed synthetic structural example; no textual impact evidence."
+    ]
+  }
+}
