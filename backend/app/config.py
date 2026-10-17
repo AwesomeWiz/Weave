@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     graph_mode: Literal["fixture", "falkordb"] = "falkordb"
     graph_name: str = "novapay"
     graph_factory: str = ""
+    source_backend: Literal["delegate", "weave_data"] = "delegate"
     falkordb_host: str = "localhost"
     falkordb_port: int = Field(default=6379, ge=1, le=65535)
     falkordb_username: str | None = None

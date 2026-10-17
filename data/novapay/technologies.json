@@ -1,0 +1,9 @@
+[
+  {
+    "id": "tech:redis",
+    "source": "service-catalog",
+    "entity_type": "Technology",
+    "name": "Redis",
+    "category": "cache"
+  }
+]

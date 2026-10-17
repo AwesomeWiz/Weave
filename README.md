@@ -2,7 +2,7 @@
 
 Company decision intelligence: React → FastAPI → deterministic decision router → graph/source adapter → Context Builder → grounded explanation → sources and an interactive evidence graph.
 
-**Development mode works end to end using explicitly labeled synthetic fixtures. Real FalkorDB retrieval is waiting for the teammate-owned graph tool and dataset. It is not implemented or verified by this slice.** Real mode never falls back to fixtures.
+**Development mode works end to end using explicitly labeled synthetic fixtures. Alen's merged `weave_data` source retrieval is connected through the backend adapter, with offline verification. Live database verification and Antony's decision-trace tool remain pending.** Real mode never falls back to fixtures, local source files or an in-memory graph.
 
 ## Install
 
@@ -53,12 +53,13 @@ Set these in `.env` and restart FastAPI (clear any conflicting shell environment
 ```dotenv
 WEAVE_GRAPH_MODE=falkordb
 WEAVE_GRAPH_FACTORY=your_package.weave_adapter:create_gateway
+WEAVE_SOURCE_BACKEND=weave_data
 WEAVE_GRAPH_NAME=novapay
 WEAVE_FALKORDB_HOST=localhost
 WEAVE_FALKORDB_PORT=6379
 ```
 
-The factory must implement the typed async `GraphGateway` contract in [backend/app/graph.py](backend/app/graph.py). It owns actual `trace_decision`, source retrieval, and graph-tool health. Use the mapping example and schema in [docs/PHASE1_IMPLEMENTATION.md](docs/PHASE1_IMPLEMENTATION.md). No production seed or teammate Cypher was duplicated here.
+The factory provides actual async `trace_decision` and graph-tool health. With `WEAVE_SOURCE_BACKEND=weave_data`, the backend independently uses Alen's persisted source retrieval; with `delegate`, the factory also provides `find_sources`. See [the current integration handoff](docs/REAL_INTEGRATION_HANDOFF.md) for parent source IDs, chunk provenance, source-only smoke testing and remaining trace/rationale blockers. No teammate Cypher was duplicated here.
 
 Without that implementation, the primary query returns HTTP **503 / GRAPH_UNAVAILABLE**. Health separately checks actual FalkorDB graph availability and tool availability; a reachable database alone is insufficient. The health probe only uses `GRAPH.LIST` and a bounded read-only graph query.
 
@@ -78,7 +79,8 @@ Restart FastAPI. Health checks that the exact model is present. Generation uses 
 ## Verify
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend\tests -q
+$env:PYTHONPATH = 'backend;.'
+.\.venv\Scripts\python.exe -m pytest backend\tests tests -q --basetemp=.local/pytest-check
 .\.venv\Scripts\python.exe -m ruff check --config backend\pyproject.toml backend
 npm.cmd --prefix frontend test
 npm.cmd --prefix frontend run lint
@@ -122,3 +124,114 @@ The implementation follows the warm paper/sage three-column layout, original Wea
 Intentional differences: fixture badges and honest connection status; no signed-in user impersonation; later-phase features visibly unavailable; no attachment action; no persistent conversations; and graph arrows use the documented ontology rather than inconsistent arrows in the mockups. The graph uses a compact decision-focused arrangement, with general Dagre layout for other shapes, and a keyboard-accessible relationship table. At narrower widths the inspector moves below the main content.
 
 See [verification notes](docs/PHASE1_VERIFICATION.md) for actual checks and remaining limitations. AI-assisted implementation: OpenAI Codex.
+# Weave — Company Brain (Data & Ingestion)
+
+> **Track 3: Company Brain** — FalkorDB Graph Hacks  
+> **Workstream:** Data / Ingestion  
+> **Owner:** Alen Abraham Saji
+
+Weave is a company decision-intelligence agent that connects incidents, issues, discussions, decisions, people, commits, repositories, services, technologies, and documents in FalkorDB.
+
+---
+
+## 🎯 Primary Demo Query & Evidence Chain
+
+**Question:** *"Why does Payment Service use Redis?"*
+
+**Canonical Evidence Chain:**
+```
+incident:INC-17  ("Payment requests timing out during peak traffic")
+       │ LED_TO
+       ▼
+issue:PAY-42     ("Reduce payment latency under burst traffic")
+       │ SUPPORTED_BY (reverse)
+       ▼
+decision:D-007   ("Introduce Redis caching" — status: accepted)
+       │
+       ├── AFFECTS          ──► service:payment-service
+       ├── INTRODUCES       ──► tech:redis
+       ├── SUPPORTED_BY     ──► issue:PAY-42
+       ├── SUPPORTED_BY     ──► message:payment-perf-7
+       ├── IMPLEMENTED_BY   ──► commit:8fae2
+       ├── DOCUMENTED_IN    ──► doc:ADR-7
+       ├── PARTICIPATED_IN  ◄── person:alice, person:ravi, person:maya
+       └── APPROVED         ◄── person:alice (approver)
+
+commit:8fae2 ──► BELONGS_TO ──► repo:novapay/payments-api
+                                       │ IMPLEMENTS
+                                       ▼
+                               service:payment-service ◄── USES ── tech:redis
+                                       ▲
+                                       │ DEPENDS_ON
+                               service:checkout-service
+```
+
+---
+
+## 🚀 Quickstart
+
+### 1. Requirements
+
+Install minimal dependencies (Python 3.10+):
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Run Ingestion CLI
+
+**Validate & prepare data without graph persistence:**
+```bash
+python -m weave_data.ingest --prepare-only
+```
+
+**Output prepared dataset as JSON:**
+```bash
+python -m weave_data.ingest --prepare-only --json
+```
+
+**Full ingestion run (FalkorDB required; failure exits nonzero):**
+```bash
+python -m weave_data.ingest
+```
+
+**Explicit offline development run (no database persistence):**
+```bash
+python -m weave_data.ingest --in-memory
+```
+
+**Connect to FalkorDB:**
+```bash
+python -m weave_data.ingest --host localhost --port 6379 --graph novapay
+```
+*(Or set environment variables `FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORDB_GRAPH`)*
+
+### 3. Run Test Suite
+
+```bash
+python -m pytest -q
+```
+*(The suite covers schema validation, referential integrity, temporal ordering, relationship extraction, text chunking, local and graph-backed source retrieval, determinism, and idempotency.)*
+
+---
+
+## 📦 Package Architecture (`weave_data/`)
+
+| Module | Purpose |
+|---|---|
+| [`models.py`](weave_data/models.py) | Pydantic v2 schemas for all canonical records (`Person`, `Team`, `Service`, `Technology`, `Repository`, `Commit`, `Issue`, `Message`, `Decision`, `Incident`, `Document`, `Chunk`). Enforces prefixed IDs, required fields, URLs, and ISO-8601 timestamps. |
+| [`loader.py`](weave_data/loader.py) | Discovers and loads source files (`JSON`, `Markdown`) from `data/novapay/`. |
+| [`validation.py`](weave_data/validation.py) | Validates unique IDs, entity type bounds, foreign reference resolution, and temporal consistency. |
+| [`relationships.py`](weave_data/relationships.py) | Maps entity fields and chunks to 33 Cypher graph edge operations (`RelationshipOp`) adhering to the knowledge graph ontology. |
+| [`chunks.py`](weave_data/chunks.py) | Generates normalized text chunks with source provenance (`url`, `timestamp`, `chunk_index`) and chunk-to-source relationships (`FROM_*`). |
+| [`retrieval.py`](weave_data/retrieval.py) | Deterministic `find_sources(source_ids)` exact-source retrieval interface resolving canonical entity IDs to structured evidence. |
+| [`graph_adapter.py`](weave_data/graph_adapter.py) | Abstraction over graph storage: `InMemoryGraphAdapter` (mock) and `FalkorDBGraphAdapter` (Cypher MERGE queries). |
+| [`ingest.py`](weave_data/ingest.py) | Pipeline orchestrator & CLI entry point. Provides `prepare_ingestion()` and `run_ingestion()`. |
+
+---
+
+## 🤝 Team Handoff & Contracts
+
+- [**Ingestion Contract**](docs/ingestion-contract.md) — Canonical IDs, schema fields, relationship mappings, and chunk specifications.
+- [**Graph Handoff (Antony)**](docs/handoff-antony.md) — Node labels, Cypher MERGE patterns, and how to consume `prepare_ingestion()`.
+- [**AI Integration Handoff (Abhishikth)**](docs/handoff-abhishikth.md) — Retrieval chunks, `find_sources` interface, entity aliases, and provenance metadata.
+- [**Frontend & Demo Handoff (Arnold)**](docs/handoff-arnold.md) — Redis decision chain, evidence timeline, and causality demo edge.

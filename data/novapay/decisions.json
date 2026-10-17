@@ -1,0 +1,19 @@
+[
+  {
+    "id": "decision:D-007",
+    "source": "decision-log",
+    "entity_type": "Decision",
+    "title": "Introduce Redis caching",
+    "summary": "Adopt Redis caching to reduce repeated read latency during payment bursts. Redis will cache idempotency keys and frequently-read payment configuration, reducing direct database hits by an estimated 60% during peak traffic windows.",
+    "status": "accepted",
+    "decided_at": "2026-05-18T14:30:00Z",
+    "category": "architecture",
+    "affects": ["service:payment-service"],
+    "introduces": ["tech:redis"],
+    "participants": ["person:alice", "person:ravi", "person:maya"],
+    "approved_by": ["person:alice"],
+    "supported_by": ["issue:PAY-42", "message:payment-perf-7"],
+    "implemented_by": ["commit:8fae2"],
+    "documented_in": ["doc:ADR-7"]
+  }
+]

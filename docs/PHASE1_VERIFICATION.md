@@ -1,4 +1,36 @@
-# Phase 1 verification — October 16, 2026
+# Phase 1 verification — October 17, 2026
+
+## Retrieved rationale provenance — latest verification
+
+The offline primary query now returns **supported** using the actual merged trace and Alen retrieval functions with explicit database doubles. No live FalkorDB verification was attempted or claimed. Latest Python result: **185 passed, two real database tests skipped**; Ruff passed. The pre-existing Starlette test-client warning remains non-failing. Frontend code was unchanged and its checks were not repeated in this backend-only pass.
+
+The provenance was not lost in normalization or retrieval. Antony's graph preserves `D-007 SUPPORTED_BY issue:PAY-42` / `message:payment-perf-7` and the corresponding `Chunk FROM_* Source` edges. Alen's `SourceRecord` and backend source wrapper preserve parent citation IDs, contributing chunk IDs, timestamps and chunk metadata. Context Builder's `by_entity` / `source_for` lookup previously recognized only direct source-to-Decision linkage, then required `decision.id in source_for`; that excluded this complete multi-hop path.
+
+The focused fix is confined to `backend/app/context.py`: derive an internal rationale source lookup for accepted decisions with the existing service/technology relationships, using only returned SUPPORTED_BY and correctly directed, typed FROM_* paths. It verifies all contributing chunks' canonical parent/type/index/text against the retrieved source and its ordered excerpt. Existing direct-source behavior remains supported. It changes no graph nodes/edges, source IDs, `entity_ids`, teammate queries, API schema, LLM prompt/provider or citation validator. The explanation uses retrieved source text with its actual Issue/Message citation, not the Decision summary relabeled as a source.
+
+New regressions first reproduced the bug: the two valid-path cases failed as partial before the context fix, while all missing-path cases were already rejected. Sixteen focused provenance cases now cover complete paths, missing/reversed/wrong-type relationships, wrong chunk IDs/parent/text/snippet, nonaccepted status, absent USES/AFFECTS/INTRODUCES, multi-chunk ordering/truncation and missing contributing chunks. Three further merged-pipeline cases verify Message-only support and removal of decision-support or chunk-provenance paths. Two earlier partial-result assertions now correctly expect supported evidence while retaining checks against synthetic Decision citations and graph mutation. The older source-only test double without Chunk nodes/edges still returns partial support, as required.
+
+The existing `weave_graph` namespace, graph/source adapters and teammate Cypher were not modified. The stash remains intact. Earlier dated partial-support findings below describe the state before this context fix.
+
+## Latest trace merge and selective stash reconciliation
+
+Reviewed merge `2c05fc0` / Antony's `d3441b8` and all tracked/untracked contents listed in `stash@{0}` before editing. The restored integration adapter, compatibility namespace and tests were retained. Only compatible client/configuration/import changes were reapplied; the older stashed trace and outdated documentation were not restored. The stash remains intact.
+
+The baseline stopped at four **import/collection errors**: absolute `app.graph.*` imports collided with FastAPI's `app.graph` gateway module. Relative imports within the teammate package and `weave_graph.trace` in external tests resolve that collision through the existing compatibility namespace. The client auth/TLS/timeouts/close options expected by the adapter were selectively restored. The adapter now preserves Antony's returned warnings, including missing-path and chunk-provenance warnings. The old database test double was updated to answer the new USES/LED_TO queries rather than replacing those queries with older code.
+
+Latest result: **166 Python tests passed, two opt-in real database tests skipped**; Ruff passed. This includes Antony's latest strengthened smoke assertions executed with an explicit offline database double. AST comparison confirmed that the complete `trace_decision` and teammate smoke `main` function bodies match the latest merged HEAD: query code, USES, LED_TO, SUPPORTED_BY, provenance retrieval and smoke assertions are unchanged. Only their imports differ.
+
+No import or adapter contract test failures remain. No actual FalkorDB query failure has been established: live query execution remains **unverified**, because the current configured `novapay` database probe returned unavailable. The offline API still reports partial support because retrieved sources lack the explicit source-to-Decision rationale linkage required by the unchanged Context Builder. This is a grounding/provenance limitation, not an import failure or a proven database-query error. Public API and grounding safeguards were not modified.
+
+Reproduce from the repository root in PowerShell:
+
+```powershell
+$env:PYTHONPATH = 'backend;.'
+.\.venv\Scripts\python.exe -m pytest backend\tests tests app\graph -q --basetemp=.local/pytest-restored-check
+.\.venv\Scripts\python.exe -m ruff check --config backend\pyproject.toml backend app\graph weave_graph tests\test_decision_trace.py
+```
+
+Older dated verification notes below retain their original context.
 
 The later frontend refinement is documented in [UI_REFINEMENT_VERIFICATION.md](UI_REFINEMENT_VERIFICATION.md), including updated browser checks, personalization, collapsible panels and viewport scrolling. Earlier browser notes below describe the original Phase 1 layout.
 
@@ -6,7 +38,7 @@ The later frontend refinement is documented in [UI_REFINEMENT_VERIFICATION.md](U
 
 | Check | Result |
 | --- | --- |
-| Backend pytest | 49 passed; 1 real integration test skipped |
+| Backend/ingestion/graph pytest | 185 passed; 2 real database tests skipped after rationale provenance fix |
 | Backend Ruff | Passed |
 | Frontend Vitest | 41 passed after UI refinement; see linked report |
 | Frontend ESLint | Passed |
@@ -24,6 +56,16 @@ Backend tests cover input validation, canonical IDs and envelope shape, fixture 
 Frontend tests cover network and API errors, unreadable/malformed responses, health 503 handling, URL safety, Enter submission, Shift+Enter, disabled/loading state, retry, and citation inspection. Component tests stub the canvas; the real React Flow renderer was exercised separately in the browser.
 
 ## October 16 integration regressions
+
+### Alen merged package integration (latest)
+
+Verified merge `26ae66a` on `integration/phase1` with a clean starting worktree. Baseline: 137 backend/ingestion tests passed, one real test skipped; 41 frontend tests passed. The initial test run hit Windows temp-directory permissions; using a workspace-owned `--basetemp` resolved that without changing application behavior.
+
+The source boundary now consumes Alen's actual graph-backed `find_sources` and `FalkorDBGraphAdapter`. Ten additional offline cases cover the four canonical sources, multi-chunk provenance/order, source failure without fallback, public HTTP shape and sanitized failures, explicit ingestion CLI failure/memory behavior, fixture isolation, and read-only parameterized client configuration. Test graph doubles are explicitly offline; no source query/Cypher or ingestion implementation was duplicated. All prior citation, decision-status, health and error regressions continue to pass.
+
+Latest full Python result: **147 passed, 2 skipped**. Backend plus changed package-file Ruff checks passed. Frontend remained unchanged: **41 tests passed**, ESLint, TypeScript and production build passed.
+
+The two skipped tests cover (1) full seeded primary query through Antony's missing trace tool and (2) independent real ingestion/retrieval using a unique test graph. Docker is not installed, no local port 6379 listener was found, and the configured real database probe returned unavailable. An actual source package HTTP test correctly returns partial evidence because there is no retrieved rationale source explicitly linked to accepted D-007. [Current configuration, provenance mapping and blockers](REAL_INTEGRATION_HANDOFF.md) document the distinction. No successful live-database or full GraphRAG workflow is claimed.
 
 Five new backend regressions failed before the fixes and now pass: source-native IDs differing from graph IDs, proposed decisions incorrectly explaining current use, failed LLM health probes incorrectly marking the graph unavailable, malformed trace payloads, and malformed source payloads. Two additional HTTP cases confirm malformed adapter output returns a sanitized 502 `GRAPH_CONTRACT_ERROR` without leaking payload details.
 
@@ -58,7 +100,7 @@ Local QA screenshots are in the ignored `.local/` directory, including `weave-we
 
 ## Remaining verification limits
 
-- **Real FalkorDB success is blocked on the teammate-owned trace tool, source retriever, and seeded NovaPay graph.** Enable `WEAVE_RUN_REAL_INTEGRATION=1` only after configuring that integration, then repeat the browser acceptance question in real mode.
+- **Real FalkorDB success is blocked on database availability, Antony's trace tool and explicit decision-rationale provenance.** Alen's source retriever is integrated and verified offline. Use `WEAVE_RUN_REAL_SOURCES=1` for the independent ingestion/source smoke once a database is available; use `WEAVE_RUN_REAL_INTEGRATION=1` only after completing the trace integration, then repeat the browser acceptance question in real mode.
 - Ollama `/api/tags` responded with an empty model list. No Qwen model was installed or downloaded. Actual LLM generation was not verified; the provider protocol, mocked success/validation and failure fallback were tested.
 - A non-failing upstream Starlette warning reports that its current test client is deprecating `httpx` in favor of `httpx2`. The pinned development environment passes its tests.
 - No deployment, authentication, production connectors, persistent conversations, expert finder, impact analysis, or freshness implementation is included.

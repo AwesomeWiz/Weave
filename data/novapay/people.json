@@ -1,0 +1,32 @@
+[
+  {
+    "id": "person:alice",
+    "source": "hr",
+    "entity_type": "Person",
+    "name": "Alice Menon",
+    "email_alias": "alice.menon@novapay.example",
+    "role": "Payments Tech Lead",
+    "team": "team:payments",
+    "active": true
+  },
+  {
+    "id": "person:ravi",
+    "source": "hr",
+    "entity_type": "Person",
+    "name": "Ravi Nair",
+    "email_alias": "ravi.nair@novapay.example",
+    "role": "Payments Engineer",
+    "team": "team:payments",
+    "active": true
+  },
+  {
+    "id": "person:maya",
+    "source": "hr",
+    "entity_type": "Person",
+    "name": "Maya Joseph",
+    "email_alias": "maya.joseph@novapay.example",
+    "role": "Platform Engineer",
+    "team": "team:platform",
+    "active": true
+  }
+]
