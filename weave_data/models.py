@@ -14,6 +14,7 @@ and normalization can run independently of the graph layer.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -72,6 +73,8 @@ class BaseRecord(BaseModel):
     def id_must_be_prefixed(cls, v: str) -> str:
         if ":" not in v:
             raise ValueError(f"Canonical ID must contain a colon prefix, got: {v!r}")
+        if re.search(r"\s", v):
+            raise ValueError(f"Canonical ID must not contain whitespace, got: {v!r}")
         return v
 
 
@@ -164,6 +167,7 @@ class DocumentRecord(BaseRecord):
     content: Optional[str] = None
     updated_at: Optional[datetime] = None
     url: Optional[str] = None
+    describes: list[str] = Field(default_factory=list)
 
 
 class DecisionRecord(BaseRecord):

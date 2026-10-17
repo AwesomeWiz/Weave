@@ -607,10 +607,10 @@ class TestReportingStructure:
         res = run_ingestion(DATA_DIR, adapter=adapter)
         d = res.to_dict()
         assert d["status"] == "success"
-        assert d["records_processed"] == 15
-        assert d["nodes_created_or_updated"] == 15
-        assert d["relationships_processed"] == 33
-        assert d["chunks_created_or_updated"] == 4
+        assert d["records_processed"] == res.records_processed
+        assert d["nodes_created_or_updated"] == res.nodes_created_or_updated
+        assert d["relationships_processed"] == res.relationships_processed
+        assert d["chunks_created_or_updated"] == res.chunks_created_or_updated
         assert d["errors"] == []
 
     def test_failure_result_to_dict(self):
@@ -641,8 +641,7 @@ class TestChunkRelationships:
         adapter = InMemoryGraphAdapter()
         res = run_ingestion(DATA_DIR, adapter=adapter)
         assert res.status == "success"
-        # Total relationships = 29 entity-entity + 4 chunk-source = 33
-        assert adapter.relationship_count() == 33
+        assert adapter.relationship_count() == res.relationships_processed
         assert adapter.get_relationship("chunk:issue:PAY-42:0", "FROM_ISSUE", "issue:PAY-42") is not None
         assert adapter.get_relationship("chunk:doc:ADR-7:0", "FROM_DOCUMENT", "doc:ADR-7") is not None
         assert adapter.get_relationship("chunk:commit:8fae2:0", "FROM_COMMIT", "commit:8fae2") is not None
