@@ -71,7 +71,7 @@ export default function Inspector({ result, health, healthError, selectedSource,
           <span className="row-copy"><strong>{node.label}</strong><small>{node.type}</small></span><ChevronRight size={16} /></button>)}
       </section>}
       <section className="panel"><h2>Evidence status</h2><p className="status-line"><CircleCheck size={17} />{result.support_status.replaceAll('_', ' ')}</p>
-        <p className="muted small">{result.metadata.generation === 'ollama' ? 'Explained with Ollama' : 'Deterministic evidence summary'} · {(result.metadata.latency_ms / 1000).toFixed(2)}s</p>
+        <p className="muted small">{result.metadata.generation === 'openrouter' ? 'Synthesized with OpenRouter' : result.metadata.generation === 'ollama' ? 'Explained with Ollama' : 'Deterministic evidence summary'} · {(result.metadata.latency_ms / 1000).toFixed(2)}s</p>
         <p className="muted small">{result.metadata.graph_mode === 'fixture' ? 'Synthetic development data. No live sources are connected.' : 'Retrieved through the configured graph tool.'}</p>
       </section>
     </aside>;

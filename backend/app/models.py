@@ -65,7 +65,7 @@ class TraceResult(BaseModel):
 class Metadata(BaseModel):
     latency_ms: int
     graph_mode: Literal["fixture", "falkordb"]
-    generation: Literal["deterministic", "ollama"] = "deterministic"
+    generation: Literal["deterministic", "ollama", "openrouter"] = "deterministic"
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -86,3 +86,199 @@ class HealthResponse(BaseModel):
     llm: Literal["available", "unavailable", "disabled"]
     graph: str
     graph_mode: Literal["fixture", "falkordb"]
+
+
+class ImpactInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entity_id: str = Field(pattern=r"^(service|tech):[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=128)
+    max_depth: int = Field(default=2, ge=1, le=3, strict=True)
+
+
+class ImpactPathEdge(BaseModel):
+    source: str
+    type: Literal["DEPENDS_ON", "USES"]
+    target: str
+
+
+class ImpactOwner(BaseModel):
+    id: str
+    name: str
+
+
+class ImpactRelated(BaseModel):
+    id: str
+    title: str
+    properties: dict[str, Any]
+    service_id: str
+
+
+class ImpactFinding(BaseModel):
+    service_id: str
+    service: dict[str, Any]
+    impact_depth: int = Field(ge=1, le=3, strict=True)
+    impact_type: Literal["direct", "indirect"]
+    path: list[str]
+    path_edges: list[ImpactPathEdge]
+    owners: list[ImpactOwner] = Field(default_factory=list)
+    related_issues: list[ImpactRelated] = Field(default_factory=list)
+    related_incidents: list[ImpactRelated] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class ImpactData(BaseModel):
+    entity: GraphNode | None = None
+    direct_impact: list[ImpactFinding] = Field(default_factory=list)
+    indirect_impact: list[ImpactFinding] = Field(default_factory=list)
+    related_issues: list[ImpactRelated] = Field(default_factory=list)
+    related_incidents: list[ImpactRelated] = Field(default_factory=list)
+
+
+class GraphSourceReference(BaseModel):
+    id: str = Field(min_length=1)
+    chunk_id: str | None = None
+
+
+class ImpactResult(BaseModel):
+    """Common teammate graph-tool envelope, with typed Impact Analysis data."""
+    data: ImpactData
+    sources: list[GraphSourceReference] = Field(default_factory=list, max_length=40)
+    nodes: list[GraphNode] = Field(default_factory=list, max_length=60)
+    edges: list[GraphEdge] = Field(default_factory=list, max_length=160)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ImpactResponse(QueryResponse):
+    data: ImpactData
+
+
+class ExpertInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=1, max_length=2000)
+    limit: int = Field(default=5, ge=1, le=10, strict=True)
+
+    @field_validator("query")
+    @classmethod
+    def strip_query(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Query must not be blank")
+        return value.strip()
+
+
+class ExpertPathEdge(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source: str
+    type: str
+    target: str
+
+
+class ExpertEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    category: Literal["team_ownership", "decision_approval", "decision_participation",
+                      "commit_authorship", "issue_assignment", "discussion_contribution"]
+    entity_id: str
+    entity_type: str
+    path: list[ExpertPathEdge] = Field(min_length=1, max_length=2)
+    # Derived only after independent graph and source provenance validation.
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class ExpertPerson(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str
+    name: str
+    role: str | None
+
+
+class ExpertRanking(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    person: ExpertPerson
+    evidence: list[ExpertEvidence] = Field(min_length=1, max_length=100)
+    ownership: list[ExpertEvidence] = Field(max_length=100)
+    historical_contributions: list[ExpertEvidence] = Field(max_length=100)
+    score: int = Field(ge=1)
+    ranking_reasons: list[str] = Field(max_length=100)
+    ownership_classification: Literal["team_membership_with_team_owned_service", "no_current_ownership_evidence"]
+
+
+class ExpertData(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    query: str
+    topics: list[GraphNode] = Field(max_length=20)
+    experts: list[ExpertRanking] = Field(max_length=10)
+    scoring: dict[str, int]
+
+
+class ExpertSourceReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str
+    chunk_id: str
+    title: str | None = None
+    text: str | None = None
+    url: str | None = None
+
+
+class ExpertResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    data: ExpertData
+    sources: list[ExpertSourceReference] = Field(default_factory=list, max_length=100)
+    nodes: list[GraphNode] = Field(default_factory=list, max_length=80)
+    edges: list[GraphEdge] = Field(default_factory=list, max_length=200)
+    warnings: list[str] = Field(default_factory=list, max_length=30)
+
+
+class ExpertResponse(QueryResponse):
+    data: ExpertData
+
+
+class FreshnessInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    entity: str = Field(min_length=1, max_length=256)
+
+    @field_validator("entity")
+    @classmethod
+    def strip_entity(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Entity must not be blank")
+        return value.strip()
+
+
+class FreshnessTrigger(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    type: Literal["decision", "commit", "incident"]
+    id: str
+    timestamp: str
+    affected_entity_id: str
+    path: list[ExpertPathEdge] = Field(min_length=1, max_length=1)
+    # Derived from validated FROM_COMMIT provenance; graph-only events stay empty.
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class FreshnessFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    document: GraphNode
+    document_id: str
+    updated_at: str
+    affected_entity_id: str
+    document_path: list[ExpertPathEdge] = Field(min_length=1, max_length=2)
+    triggers: list[FreshnessTrigger] = Field(min_length=1, max_length=150)
+    reason: str
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class FreshnessData(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    entity: GraphNode | None
+    review_candidates: list[FreshnessFinding] = Field(max_length=50)
+
+
+class FreshnessResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    data: FreshnessData
+    sources: list[ExpertSourceReference] = Field(default_factory=list, max_length=100)
+    nodes: list[GraphNode] = Field(default_factory=list, max_length=80)
+    edges: list[GraphEdge] = Field(default_factory=list, max_length=200)
+    warnings: list[str] = Field(default_factory=list, max_length=200)
+
+
+class FreshnessResponse(QueryResponse):
+    data: FreshnessData

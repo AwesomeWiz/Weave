@@ -28,5 +28,15 @@
     "role": "Platform Engineer",
     "team": "team:platform",
     "active": true
+  },
+  {
+    "id": "person:neeraj",
+    "source": "hr",
+    "entity_type": "Person",
+    "name": "Neeraj Shah",
+    "email_alias": "neeraj.shah@novapay.example",
+    "role": "Site Reliability Engineer",
+    "team": "team:platform",
+    "active": true
   }
 ]

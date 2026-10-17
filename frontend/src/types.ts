@@ -10,10 +10,55 @@ export interface Source {
 export interface QueryResponse {
   answer: string; support_status: SupportStatus; tools_used: string[];
   sources: Source[]; graph: EvidenceGraph;
-  metadata: { latency_ms: number; graph_mode: GraphMode; generation: 'deterministic' | 'ollama'; warnings: string[] };
+  metadata: { latency_ms: number; graph_mode: GraphMode; generation: 'deterministic' | 'ollama' | 'openrouter'; warnings: string[] };
 }
 export interface Health {
   status: 'ok' | 'degraded' | 'unavailable'; backend: 'available';
   falkordb: 'connected' | 'unavailable' | 'not_checked'; graph_tool: 'available' | 'unavailable' | 'fixture';
   llm: 'available' | 'unavailable' | 'disabled'; graph: string; graph_mode: GraphMode;
+}
+
+export interface ImpactInput { entity_id: string; max_depth: number }
+export interface ImpactFinding {
+  service_id: string; service: Record<string, unknown>; impact_depth: number; impact_type: 'direct' | 'indirect';
+  path: string[]; path_edges: { source: string; type: 'DEPENDS_ON' | 'USES'; target: string }[];
+  owners: { id: string; name: string }[];
+  related_issues: { id: string; title: string; service_id: string; properties: Record<string, unknown> }[];
+  related_incidents: { id: string; title: string; service_id: string; properties: Record<string, unknown> }[];
+  source_ids: string[];
+}
+export interface ImpactResponse extends QueryResponse {
+  data: { entity: GraphNode | null; direct_impact: ImpactFinding[]; indirect_impact: ImpactFinding[];
+    related_issues: ImpactFinding['related_issues']; related_incidents: ImpactFinding['related_incidents'] };
+}
+
+export interface ExpertInput { query: string; limit: number }
+export interface ExpertEvidence {
+  category: 'team_ownership' | 'decision_approval' | 'decision_participation' | 'commit_authorship' | 'issue_assignment' | 'discussion_contribution';
+  entity_id: string; entity_type: string;
+  path: { source: string; type: string; target: string }[];
+  source_ids: string[];
+}
+export interface ExpertRanking {
+  person: { id: string; name: string; role: string | null };
+  score: number; ranking_reasons: string[]; evidence: ExpertEvidence[];
+  ownership: ExpertEvidence[]; historical_contributions: ExpertEvidence[];
+  ownership_classification: 'team_membership_with_team_owned_service' | 'no_current_ownership_evidence';
+}
+export interface ExpertResponse extends QueryResponse {
+  data: { query: string; topics: GraphNode[]; experts: ExpertRanking[]; scoring: Record<string, number> };
+}
+
+export interface FreshnessInput { entity: string }
+export interface FreshnessPath { source: string; type: string; target: string }
+export interface FreshnessTrigger {
+  type: 'decision' | 'commit' | 'incident'; id: string; timestamp: string;
+  affected_entity_id: string; path: FreshnessPath[]; source_ids: string[];
+}
+export interface FreshnessFinding {
+  document: GraphNode; document_id: string; updated_at: string; affected_entity_id: string;
+  document_path: FreshnessPath[]; triggers: FreshnessTrigger[]; reason: string; source_ids: string[];
+}
+export interface FreshnessResponse extends QueryResponse {
+  data: { entity: GraphNode | null; review_candidates: FreshnessFinding[] };
 }

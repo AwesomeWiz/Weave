@@ -143,6 +143,7 @@ _REF_COMPATIBILITY: dict[tuple[EntityType, str], set[EntityType]] = {
     (EntityType.Team, "owns_services"): {EntityType.Service},
     (EntityType.Person, "team"): {EntityType.Team},
     (EntityType.Message, "participants"): {EntityType.Person},
+    (EntityType.Document, "describes"): {EntityType.Service},
 }
 
 
@@ -154,6 +155,7 @@ def validate_dataset(
     records: list[BaseRecord],
     aliases: dict[str, str] | None = None,
     source_file_map: dict[str, str] | None = None,
+    chunks: list[Any] | None = None,
 ) -> ValidationResult:
     """
     Validate a list of parsed records.
@@ -166,6 +168,8 @@ def validate_dataset(
         Optional alias map (alias → canonical ID).
     source_file_map:
         Optional mapping from record ID → source filename for error messages.
+    chunks:
+        Optional list of ChunkRecord objects to validate chunk/source provenance.
 
     Returns
     -------
@@ -196,6 +200,10 @@ def validate_dataset(
         if expected_prefix and not rec.id.startswith(expected_prefix):
             result.add(fname, rec.id, "id",
                        f"ID prefix mismatch: expected '{expected_prefix}' for {rec.entity_type.value}.")
+        elif expected_prefix and rec.id.startswith(expected_prefix):
+            identifier = rec.id[len(expected_prefix):]
+            if not identifier or re.search(r"\s", rec.id) or not re.match(r"^[a-zA-Z0-9_\-\./]+$", identifier):
+                result.add(fname, rec.id, "id", f"Malformed canonical ID format: '{rec.id}'.")
 
         id_registry[rec.id] = rec.entity_type
 
@@ -273,6 +281,37 @@ def validate_dataset(
             if isinstance(value, str) and _looks_like_credential(value):
                 result.add(fname, rec.id, field_name,
                            "Possible credential or private data detected.")
+
+    # ------------------------------------------------------------------
+    # Pass 8: Orphan decisions check
+    # ------------------------------------------------------------------
+    _validate_orphan_decisions(records, file_map, result)
+
+    # ------------------------------------------------------------------
+    # Pass 9: Service ownership check
+    # ------------------------------------------------------------------
+    _validate_service_ownership(records, file_map, result)
+
+    # ------------------------------------------------------------------
+    # Pass 10: Primary decision evidence check
+    # ------------------------------------------------------------------
+    _validate_decision_evidence(records, file_map, result)
+
+    # ------------------------------------------------------------------
+    # Pass 11: Timestamp chronology check
+    # ------------------------------------------------------------------
+    _validate_chronology(records, file_map, result)
+
+    # ------------------------------------------------------------------
+    # Pass 12: Text integrity check
+    # ------------------------------------------------------------------
+    _validate_text_integrity(records, file_map, result)
+
+    # ------------------------------------------------------------------
+    # Pass 13: Chunk/source provenance integrity check
+    # ------------------------------------------------------------------
+    if chunks is not None:
+        _validate_chunks(chunks, id_registry, result)
 
     return result
 
@@ -420,3 +459,152 @@ def _validate_aliases(
         if target not in id_registry:
             result.add("aliases.json", alias, "target",
                        f"Alias target '{target}' not found in ID registry.")
+
+
+# ---------------------------------------------------------------------------
+# Additional data quality checks (Passes 8–13)
+# ---------------------------------------------------------------------------
+
+def _validate_orphan_decisions(
+    records: list[BaseRecord],
+    file_map: dict[str, str],
+    result: ValidationResult,
+) -> None:
+    for rec in records:
+        if isinstance(rec, DecisionRecord):
+            fname = file_map.get(rec.id, "<unknown>")
+            connections = (
+                rec.affects + rec.introduces + rec.participants +
+                rec.approved_by + rec.supported_by + rec.implemented_by +
+                rec.documented_in
+            )
+            if not connections:
+                result.add(fname, rec.id, "id", f"Orphan Decision: '{rec.id}' has no connected entities.")
+
+
+def _validate_service_ownership(
+    records: list[BaseRecord],
+    file_map: dict[str, str],
+    result: ValidationResult,
+) -> None:
+    from .models import ServiceRecord, TeamRecord
+    owned_services: set[str] = set()
+    for rec in records:
+        if isinstance(rec, TeamRecord):
+            owned_services.update(rec.owns_services)
+    for rec in records:
+        if isinstance(rec, ServiceRecord):
+            fname = file_map.get(rec.id, "<unknown>")
+            if rec.id not in owned_services:
+                result.add(fname, rec.id, "owns_services", f"Service '{rec.id}' has no owner team.")
+
+
+def _validate_decision_evidence(
+    records: list[BaseRecord],
+    file_map: dict[str, str],
+    result: ValidationResult,
+) -> None:
+    for rec in records:
+        if isinstance(rec, DecisionRecord):
+            fname = file_map.get(rec.id, "<unknown>")
+            if rec.status == "accepted" and len(rec.supported_by) < 2:
+                result.add(
+                    fname, rec.id, "supported_by",
+                    f"Primary/accepted decision '{rec.id}' has insufficient evidence sources ({len(rec.supported_by)} < 2)."
+                )
+
+
+def _validate_chronology(
+    records: list[BaseRecord],
+    file_map: dict[str, str],
+    result: ValidationResult,
+) -> None:
+    from .models import IssueRecord, MessageRecord, CommitRecord, DocumentRecord, IncidentRecord
+    rec_map = {r.id: r for r in records}
+    for rec in records:
+        fname = file_map.get(rec.id, "<unknown>")
+        if isinstance(rec, DecisionRecord) and rec.decided_at:
+            for sup_id in rec.supported_by:
+                sup = rec_map.get(sup_id)
+                if isinstance(sup, IssueRecord) and sup.created_at and sup.created_at > rec.decided_at:
+                    result.add(
+                        fname, rec.id, "decided_at",
+                        f"Chronology error: supporting issue '{sup_id}' created ({sup.created_at}) after decision ({rec.decided_at})."
+                    )
+                elif isinstance(sup, MessageRecord) and sup.timestamp and sup.timestamp > rec.decided_at:
+                    result.add(
+                        fname, rec.id, "decided_at",
+                        f"Chronology error: supporting message '{sup_id}' timestamp ({sup.timestamp}) after decision ({rec.decided_at})."
+                    )
+            for imp_id in rec.implemented_by:
+                imp = rec_map.get(imp_id)
+                if isinstance(imp, CommitRecord) and imp.timestamp and imp.timestamp < rec.decided_at:
+                    result.add(
+                        fname, rec.id, "decided_at",
+                        f"Chronology error: implementing commit '{imp_id}' timestamp ({imp.timestamp}) before decision ({rec.decided_at})."
+                    )
+        elif isinstance(rec, IncidentRecord) and rec.started_at:
+            for issue_id in rec.related_issues:
+                iss = rec_map.get(issue_id)
+                if isinstance(iss, IssueRecord) and iss.created_at and iss.created_at < rec.started_at:
+                    result.add(
+                        fname, rec.id, "started_at",
+                        f"Chronology error: incident '{rec.id}' started ({rec.started_at}) after related issue '{issue_id}' created ({iss.created_at})."
+                    )
+
+
+def _validate_text_integrity(
+    records: list[BaseRecord],
+    file_map: dict[str, str],
+    result: ValidationResult,
+) -> None:
+    from .models import IssueRecord, MessageRecord, CommitRecord, DocumentRecord
+    for rec in records:
+        fname = file_map.get(rec.id, "<unknown>")
+        if isinstance(rec, IssueRecord):
+            if not rec.title or not rec.title.strip():
+                result.add(fname, rec.id, "title", "Issue has empty title.")
+            if rec.description is not None and not rec.description.strip():
+                result.add(fname, rec.id, "description", "Issue has empty description text.")
+        elif isinstance(rec, MessageRecord):
+            if not rec.text or not rec.text.strip():
+                result.add(fname, rec.id, "text", "Message has empty text.")
+        elif isinstance(rec, CommitRecord):
+            if not rec.message or not rec.message.strip():
+                result.add(fname, rec.id, "message", "Commit has empty message.")
+        elif isinstance(rec, DocumentRecord):
+            if not rec.title or not rec.title.strip():
+                result.add(fname, rec.id, "title", "Document has empty title.")
+            if rec.content is not None and not rec.content.strip():
+                result.add(fname, rec.id, "content", "Document has empty content text.")
+
+
+def _validate_chunks(
+    chunks: list[Any],
+    id_registry: dict[str, EntityType],
+    result: ValidationResult,
+) -> None:
+    for chunk in chunks:
+        cid = getattr(chunk, "id", "")
+        if not cid or not str(cid).strip():
+            result.add("<chunks>", "(empty)", "id", "Chunk has an empty ID.")
+            continue
+        if not str(cid).startswith("chunk:"):
+            result.add("<chunks>", cid, "id", f"Chunk ID missing 'chunk:' prefix: '{cid}'.")
+        sid = getattr(chunk, "source_id", "")
+        if sid not in id_registry:
+            result.add(
+                "<chunks>", cid, "source_id",
+                f"Chunk provenance error: source '{sid}' not found in ID registry."
+            )
+        else:
+            target_type = id_registry[sid]
+            stype = getattr(chunk, "source_type", "")
+            if stype != target_type.value:
+                result.add(
+                    "<chunks>", cid, "source_type",
+                    f"Chunk source_type '{stype}' does not match target entity type '{target_type.value}'."
+                )
+        text = getattr(chunk, "text", "")
+        if not text or not str(text).strip():
+            result.add("<chunks>", cid, "text", "Chunk has empty text.")

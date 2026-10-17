@@ -1,6 +1,10 @@
 # Weave — Shared Project Context Pack
 
-Current implementation: [repository setup](../README.md), [Phase 1 contract](PHASE1_IMPLEMENTATION.md), and [verification results](PHASE1_VERIFICATION.md). Phase 1 runs in explicitly labeled fixture mode; the real graph dependency remains teammate-owned.
+Current implementation: [repository setup](../README.md), [Phase 1 contract](PHASE1_IMPLEMENTATION.md), [Phase 1 verification](PHASE1_VERIFICATION.md), and [Phase 2 Impact Analysis handoff](PHASE2_IMPACT_HANDOFF.md). Both teammate graph and source packages are integrated; offline checks pass. Successful live FalkorDB verification remains required on this machine.
+
+Latest integration: [Knowledge Freshness](PHASE2_FRESHNESS_HANDOFF.md), including four-tool routing, provenance validation, offline verification, and pending live acceptance.
+
+Orchestration background: [Multi-tool routing and Context Builder V2](PHASE2_MULTITOOL_HANDOFF.md), including the unchanged query response contract and graph-tool extension instructions.
 
 This folder is the recommended context pack for the shared ChatGPT Project **Weave — FalkorDB Graph Hacks**.
 

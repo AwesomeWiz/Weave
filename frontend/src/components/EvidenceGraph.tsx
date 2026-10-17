@@ -48,8 +48,8 @@ function InitialFit({ visible }: { visible: boolean }) {
   return null;
 }
 
-export default function EvidenceGraph({ graph, onSelect, selectedId, expanded = false, visible = true }: {
-  graph: Graph; onSelect: (node: GraphNode) => void; selectedId?: string; expanded?: boolean; visible?: boolean;
+export default function EvidenceGraph({ graph, onSelect, selectedId, highlightedEdgeIds = [], expanded = false, visible = true }: {
+  graph: Graph; onSelect: (node: GraphNode) => void; selectedId?: string; highlightedEdgeIds?: string[]; expanded?: boolean; visible?: boolean;
 }) {
   const { nodes, edges } = useMemo(() => {
     const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
@@ -123,12 +123,12 @@ export default function EvidenceGraph({ graph, onSelect, selectedId, expanded = 
         className: selectedId && neighbors.has(node.id) ? 'connected-node' : '',
         style: { opacity: selectedId && !neighbors.has(node.id) ? 0.75 : 1 } })),
       edges: edges.map(edge => {
-        const connected = edge.source === selectedId || edge.target === selectedId;
+        const connected = highlightedEdgeIds.length ? highlightedEdgeIds.includes(edge.id) : edge.source === selectedId || edge.target === selectedId;
         return { ...edge, style: { ...edge.style, stroke: connected ? '#315d48' : '#7b9181', strokeWidth: connected ? 2.4 : 1.3, opacity: selectedId && !connected ? 0.55 : 1 },
           markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: connected ? '#315d48' : '#7b9181' } };
       }),
     };
-  }, [nodes, edges, graph.edges, selectedId]);
+  }, [nodes, edges, graph.edges, selectedId, highlightedEdgeIds]);
 
   if (!graph.nodes.length) return <div className="graph-empty"><GitEmpty />No connected graph evidence was returned.</div>;
   return <div className={`graph-canvas ${expanded ? 'expanded' : ''}`} aria-label="Evidence graph">

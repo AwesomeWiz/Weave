@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +19,12 @@ class Settings(BaseSettings):
     falkordb_username: str | None = None
     falkordb_password: SecretStr | None = None
     falkordb_ssl: bool = False
-    llm_provider: Literal["none", "ollama"] = "none"
+    llm_provider: Literal["none", "ollama", "openrouter"] = "none"
+    openrouter_api_key: SecretStr | None = Field(default=None, repr=False, validation_alias=AliasChoices(
+        "WEAVE_OPENROUTER_API_KEY", "OPENROUTER_API_KEY", "openrouter_api_key"))
+    llm_model: Literal["openai/gpt-oss-120b"] = Field(default="openai/gpt-oss-120b", validation_alias=AliasChoices(
+        "WEAVE_LLM_MODEL", "LLM_MODEL", "llm_model"))
+    openrouter_max_tokens: int = Field(default=1200, ge=256, le=4096)
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
     llm_timeout_seconds: float = Field(default=30, gt=0, le=90)

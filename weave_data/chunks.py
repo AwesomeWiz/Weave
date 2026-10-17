@@ -40,13 +40,6 @@ def generate_chunks(
     """
     chunks: list[ChunkRecord] = []
 
-    # Find doc:ADR-7 record if present to extract metadata (timestamp, url, title)
-    doc_rec: DocumentRecord | None = None
-    for rec in records:
-        if isinstance(rec, DocumentRecord) and rec.id == "doc:ADR-7":
-            doc_rec = rec
-            break
-
     for rec in records:
         if isinstance(rec, IssueRecord) and rec.description:
             chunks.append(ChunkRecord(
@@ -84,19 +77,19 @@ def generate_chunks(
                 url=rec.url,
             ))
 
-    # ADR-7 chunk (Document)
-    text = adr_content or (doc_rec.content if doc_rec else None)
-    if text:
-        chunks.append(ChunkRecord(
-            id="chunk:doc:ADR-7:0",
-            source_id="doc:ADR-7",
-            source_type="Document",
-            chunk_index=0,
-            title=doc_rec.title if doc_rec else "ADR-7: Redis Caching for Payment Service",
-            text=text,
-            timestamp=doc_rec.updated_at if doc_rec else None,
-            url=doc_rec.url if doc_rec else "https://docs.novapay.example/adrs/ADR-7",
-        ))
+        elif isinstance(rec, DocumentRecord):
+            text = (adr_content if rec.id == "doc:ADR-7" and adr_content else rec.content)
+            if text:
+                chunks.append(ChunkRecord(
+                    id=f"chunk:{rec.id}:0",
+                    source_id=rec.id,
+                    source_type="Document",
+                    chunk_index=0,
+                    title=rec.title,
+                    text=text,
+                    timestamp=rec.updated_at,
+                    url=rec.url,
+                ))
 
     # Stable sort by chunk ID
     chunks.sort(key=lambda c: c.id)
