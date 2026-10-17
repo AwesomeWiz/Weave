@@ -65,7 +65,7 @@ class TraceResult(BaseModel):
 class Metadata(BaseModel):
     latency_ms: int
     graph_mode: Literal["fixture", "falkordb"]
-    generation: Literal["deterministic", "ollama"] = "deterministic"
+    generation: Literal["deterministic", "ollama", "openrouter"] = "deterministic"
     warnings: list[str] = Field(default_factory=list)
 
 

@@ -197,7 +197,7 @@ export default function App() {
             <div className="answer-meta"><span className={`support-badge ${result.support_status}`}>
               {result.support_status === 'supported' ? <Check size={13} /> : <CircleAlert size={13} />}{result.support_status.replaceAll('_', ' ')}</span>
               <span className="small muted">{result.sources.length} sources{fixture ? ' · Demo data' : ''}</span></div>
-            {isImpactResponse(result) ? <ImpactResults result={result} onNode={selectNode} onSource={selectSource} onPath={highlightImpact} highlightedId={highlightedFinding} /> : <AnswerText result={result} onSource={selectSource} />}
+            {isImpactResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ImpactResults result={result} onNode={selectNode} onSource={selectSource} onPath={highlightImpact} highlightedId={highlightedFinding} /></> : <AnswerText result={result} onSource={selectSource} />}
           </article></div>}
           {view === 'graph' && <div className="graph-toolbar"><label className="graph-search"><Search size={17} /><input value={graphSearch} onChange={event => setGraphSearch(event.target.value)} placeholder="Find an entity in this evidence graph…" aria-label="Find graph entity" /></label><button className="button" onClick={() => { setView('chat'); setGraphSearch(''); }}>Back to answer</button></div>}
           {view === 'graph' && graphSearch && <div className="search-results">{matchedNodes.length ? matchedNodes.map(node => <button className="button" key={node.id} onClick={() => selectNode(node)}><EntityIcon type={node.type} size={16} />{node.label}</button>) : <p>No matching entities in this evidence.</p>}</div>}

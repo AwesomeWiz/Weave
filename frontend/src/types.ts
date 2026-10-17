@@ -10,7 +10,7 @@ export interface Source {
 export interface QueryResponse {
   answer: string; support_status: SupportStatus; tools_used: string[];
   sources: Source[]; graph: EvidenceGraph;
-  metadata: { latency_ms: number; graph_mode: GraphMode; generation: 'deterministic' | 'ollama'; warnings: string[] };
+  metadata: { latency_ms: number; graph_mode: GraphMode; generation: 'deterministic' | 'ollama' | 'openrouter'; warnings: string[] };
 }
 export interface Health {
   status: 'ok' | 'degraded' | 'unavailable'; backend: 'available';

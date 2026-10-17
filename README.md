@@ -80,6 +80,12 @@ WEAVE_LLM_TIMEOUT_SECONDS=30
 
 Restart FastAPI. Health checks that the exact model is present. Generation uses a bounded evidence packet, explicit grounding rules, and validated source references. Failure, timeout, malformed output, or invalid citations return the deterministic evidence summary with the graph and sources preserved. Citation validation is a guardrail, not a proof of semantic faithfulness. `WEAVE_LLM_PROVIDER=none` gives deterministic answers without a model.
 
+## Optional GPT-OSS-120B through OpenRouter
+
+Configure the backend `.env` with `WEAVE_LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, and `LLM_MODEL=openai/gpt-oss-120b`, then restart FastAPI. The equivalent prefixed key/model variables are supported. Keep credentials out of frontend configuration.
+
+Decision Trace, Impact Analysis, and combined answers use constrained presentation plans over validated evidence. The server renders factual content, checks genuine citations, retains missing-evidence caveats, and preserves support status. Provider failures return the exact deterministic summary. See the [OpenRouter handoff](docs/PHASE2_OPENROUTER_HANDOFF.md) for configuration, bounds, tests, the constrained-synthesis limitation, and pending live verification.
+
 ## Verify
 
 ```powershell

@@ -39,6 +39,17 @@ describe('API failures and contracts', () => {
       edges: [{ id: 'edge', source: '1', target: '1', type: 'TEST', properties: {} }] },
     metadata: { latency_ms: 1, graph_mode: 'fixture', generation: 'deterministic', warnings: [] },
   };
+  it('accepts OpenRouter generation through the existing query contract', async () => {
+    const response = { ...valid, metadata: { ...valid.metadata, generation: 'openrouter' } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(response))));
+    expect(await askQuestion('Why Redis?')).toEqual(response);
+  });
+  it('continues rejecting unrecognized generation providers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...valid, metadata: { ...valid.metadata, generation: 'invented-provider' },
+    }))));
+    await expect(askQuestion('Why Redis?')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  });
   it.each([
     ['numeric endpoint', { ...valid.graph, edges: [{ ...valid.graph.edges[0], source: 1 }] }],
     ['duplicate node IDs', { ...valid.graph, nodes: [...valid.graph.nodes, ...valid.graph.nodes] }],

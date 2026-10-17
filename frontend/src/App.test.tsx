@@ -21,6 +21,38 @@ beforeEach(() => { localStorage.clear(); sessionStorage.clear(); vi.mocked(getHe
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe('question workflow', () => {
+  it('renders hosted impact explanation alongside validated findings and graph inspection', async () => {
+    vi.mocked(analyzeImpact).mockResolvedValue({ ...impactFixture,
+      answer: 'Hosted explanation: Checkout Service could be affected; failure is not guaranteed.',
+      metadata: { ...impactFixture.metadata, generation: 'openrouter' },
+    });
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Impact Analysis/ }));
+    expect(await screen.findByText(/Hosted explanation: Checkout Service/)).toBeInTheDocument();
+    expect(screen.getByText(/Synthesized with OpenRouter/)).toBeInTheDocument();
+    expect(screen.getByText('partially supported', { selector: '.support-badge' })).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Direct Impact' })).getByText('service:checkout-service')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Explore in graph' }));
+    await user.click(screen.getByRole('button', { name: 'Inspect graph test node' }));
+    expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('service:payment-service');
+  });
+  it('keeps hosted decision citations navigable and labels fallback accurately', async () => {
+    vi.mocked(askQuestion).mockResolvedValue({ ...result,
+      metadata: { ...result.metadata, generation: 'openrouter' },
+    });
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: /Decision Trace/ }));
+    expect(await screen.findByText(/Synthesized with OpenRouter/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'test' }));
+    expect(screen.getByLabelText('Source inspector')).toHaveTextContent('Fixture source excerpt');
+    await user.keyboard('{Escape}');
+    vi.mocked(askQuestion).mockResolvedValue({ ...result, metadata: { ...result.metadata,
+      warnings: ['OpenRouter synthesis unavailable or rejected; showing the deterministic evidence summary.'],
+    } });
+    await user.type(screen.getByRole('textbox'), 'Why Redis?{Enter}');
+    expect(await screen.findByText(/Deterministic evidence summary/)).toBeInTheDocument();
+    expect(screen.queryByText(/Synthesized with OpenRouter/)).not.toBeInTheDocument();
+  });
   it('renders a combined answer through /api/query with citations and the existing graph inspector', async () => {
     const combined = 'What led to Redis being introduced for Payment Service, and what services might be affected if Redis were removed?';
     vi.mocked(askQuestion).mockResolvedValue({ ...result, support_status: 'partially_supported',

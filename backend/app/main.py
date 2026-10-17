@@ -8,12 +8,14 @@ from fastapi.responses import JSONResponse
 
 from .config import Settings
 from .context import build_context
+from .context_v2 import CombinedContext
 from .graph import FalkorGateway, GraphContractError, GraphGateway, GraphUnavailable, create_gateway
 from .llm import LLMProvider, create_provider
 from .impact import build_impact_context
 from .models import HealthResponse, ImpactInput, ImpactResponse, Metadata, QueryRequest, QueryResponse
 from .orchestration import TOOL_REGISTRY, execute_plan
 from .router import plan_question, route_question
+from .synthesis import single_tool_context
 
 
 def error_response(code: str, message: str, status: int) -> JSONResponse:
@@ -78,7 +80,19 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
         )
         return JSONResponse(status_code=503 if critical else 200, content=result.model_dump())
 
-    async def run_impact(request: ImpactInput) -> ImpactResponse:
+    async def hosted_answer(question, context, metadata, tool=None, data=None):
+        if config.llm_provider != "openrouter" or context.status == "insufficient_evidence":
+            return context.summary
+        try:
+            packet = context if isinstance(context, CombinedContext) else single_tool_context(context, tool, data)
+            answer = await llm.generate(question, packet)
+            metadata.generation = "openrouter"
+            return answer
+        except Exception:
+            metadata.warnings.append("OpenRouter synthesis unavailable or rejected; showing the deterministic evidence summary.")
+            return context.summary
+
+    async def run_impact(request: ImpactInput, question: str | None = None) -> ImpactResponse:
         start = time.perf_counter()
         result = await graph.impact_analysis(request)
         try:
@@ -89,11 +103,14 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
         context, data = build_impact_context(result, records, request)
         if config.graph_mode == "fixture":
             context.warnings.insert(0, "Development fixture — synthetic evidence, not live FalkorDB data.")
+        metadata = Metadata(latency_ms=0, graph_mode=config.graph_mode, warnings=context.warnings)
+        answer = await hosted_answer(question or f"What could be affected by changes to {request.entity_id}?",
+                                     context, metadata, "impact_analysis", data)
+        metadata.latency_ms = round((time.perf_counter() - start) * 1000)
         return ImpactResponse(
-            answer=context.summary, support_status=context.status, tools_used=["impact_analysis"],
+            answer=answer, support_status=context.status, tools_used=["impact_analysis"],
             sources=context.sources, graph=context.graph, data=data,
-            metadata=Metadata(latency_ms=round((time.perf_counter() - start) * 1000),
-                              graph_mode=config.graph_mode, warnings=context.warnings),
+            metadata=metadata,
         )
 
     @app.post("/api/tools/impact-analysis", response_model=ImpactResponse)
@@ -112,12 +129,13 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
             metadata.warnings = context.warnings
             if config.graph_mode == "fixture":
                 metadata.warnings.insert(0, "Development fixture — synthetic evidence, not live FalkorDB data.")
+            answer = await hosted_answer(request.question, context, metadata)
             metadata.latency_ms = round((time.perf_counter() - start) * 1000)
-            return QueryResponse(answer=context.summary, support_status=context.status,
+            return QueryResponse(answer=answer, support_status=context.status,
                                  tools_used=tools_used, sources=context.sources,
                                  graph=context.graph, metadata=metadata)
         if isinstance(target, ImpactInput):
-            response = await run_impact(target)
+            response = await run_impact(target, request.question)
             return QueryResponse.model_validate(response.model_dump(exclude={"data"}))
         trace = await graph.trace_decision(target)
         try:
@@ -130,7 +148,9 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
         metadata.warnings = context.warnings
         if config.graph_mode == "fixture":
             metadata.warnings.insert(0, "Development fixture — synthetic evidence, not live FalkorDB data.")
-        if context.can_explain and config.llm_provider != "none":
+        if config.llm_provider == "openrouter":
+            answer = await hosted_answer(request.question, context, metadata, "decision_trace")
+        elif context.can_explain and config.llm_provider == "ollama":
             try:
                 answer = await llm.generate(request.question, context)
                 metadata.generation = "ollama"

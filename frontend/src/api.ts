@@ -42,7 +42,7 @@ function validEvidence(data: Record<string, unknown>): boolean {
     })
     && strings(data.tools_used) && typeof data.metadata.latency_ms === 'number'
     && Number.isFinite(data.metadata.latency_ms) && data.metadata.latency_ms >= 0
-    && strings(data.metadata.warnings) && ['deterministic', 'ollama'].includes(String(data.metadata.generation));
+    && strings(data.metadata.warnings) && ['deterministic', 'ollama', 'openrouter'].includes(String(data.metadata.generation));
 }
 
 async function postEvidence(path: string, body: unknown): Promise<QueryResponse> {
