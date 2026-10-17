@@ -112,6 +112,9 @@ RELATIONSHIP_MAP: list[dict[str, str]] = [
 
     # Message
     {"entity": "Message",  "field": "participants",       "rel": "WROTE",             "dir": "reverse"},
+
+    # Document
+    {"entity": "Document", "field": "describes",          "rel": "DESCRIBES",         "dir": "forward"},
 ]
 
 

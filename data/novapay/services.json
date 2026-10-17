@@ -6,7 +6,7 @@
     "name": "Payment Service",
     "description": "Core payment processing service handling transaction authorization, capture, and settlement.",
     "criticality": "high",
-    "technologies": ["tech:redis"],
+    "technologies": ["tech:redis", "tech:postgresql"],
     "depends_on": []
   },
   {
@@ -18,5 +18,15 @@
     "criticality": "high",
     "technologies": [],
     "depends_on": ["service:payment-service"]
+  },
+  {
+    "id": "service:order-service",
+    "source": "service-catalog",
+    "entity_type": "Service",
+    "name": "Order Service",
+    "description": "Order management service that orchestrates checkout submissions and order lifecycle states.",
+    "criticality": "medium",
+    "technologies": ["tech:postgresql"],
+    "depends_on": ["service:checkout-service"]
   }
 ]

@@ -95,20 +95,20 @@ def run_ingestion(
     result.records_processed = len(records)
 
     # ------------------------------------------------------------------
-    # 2. Validate
+    # 2. Chunks
     # ------------------------------------------------------------------
-    validation = validate_dataset(records, aliases, source_file_map)
+    chunks = generate_chunks(records, adr_content)
+
+    # ------------------------------------------------------------------
+    # 3. Validate
+    # ------------------------------------------------------------------
+    validation = validate_dataset(records, aliases, source_file_map, chunks=chunks)
     result.validation = validation
 
     if not validation.ok:
         result.status = "failed"
         result.errors = [str(e) for e in validation.errors]
         return result
-
-    # ------------------------------------------------------------------
-    # 3. Chunks
-    # ------------------------------------------------------------------
-    chunks = generate_chunks(records, adr_content)
 
     # ------------------------------------------------------------------
     # 4. Relationships (including chunk-to-source relationships)
@@ -201,9 +201,8 @@ def prepare_ingestion(
     aliases = load_aliases(data_dir)
     adr_content = load_adr_content(data_dir)
 
-    validation = validate_dataset(records, aliases, source_file_map)
-
     chunks = generate_chunks(records, adr_content)
+    validation = validate_dataset(records, aliases, source_file_map, chunks=chunks)
     rel_ops = extract_relationships(records, chunks=chunks)
 
     return records, rel_ops, chunks, aliases, validation

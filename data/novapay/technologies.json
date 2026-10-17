@@ -5,5 +5,12 @@
     "entity_type": "Technology",
     "name": "Redis",
     "category": "cache"
+  },
+  {
+    "id": "tech:postgresql",
+    "source": "service-catalog",
+    "entity_type": "Technology",
+    "name": "PostgreSQL",
+    "category": "database"
   }
 ]

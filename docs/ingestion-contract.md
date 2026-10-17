@@ -43,7 +43,9 @@ data/novapay/
 ├── slack/
 │   └── messages.json
 └── docs/
-    └── ADR-7.md
+    ├── ADR-7.md
+    ├── architecture-overview.md
+    └── runbook-payment-latency.md
 ```
 
 ## 3. Record schema
@@ -84,6 +86,7 @@ Every JSON record carries:
 | Team          | `owns_services`      | `OWNS`                 | Team → Service    |
 | Person        | `team`               | `MEMBER_OF`            | Person → Team     |
 | Message       | `participants`       | `WROTE`                | Person → Message  |
+| Document      | `describes`          | `DESCRIBES`            | Document → Service|
 
 Directions follow `docs/04_KNOWLEDGE_GRAPH.md`.
 
@@ -91,14 +94,16 @@ Directions follow `docs/04_KNOWLEDGE_GRAPH.md`.
 
 All timestamps are UTC ISO-8601.
 
-| Date            | Event                    |
-|----------------|--------------------------|
-| 2026-05-10     | INC-17 (started)         |
-| 2026-05-11     | PAY-42 opened            |
-| 2026-05-15     | Discussion started       |
-| 2026-05-18     | D-007 accepted           |
-| 2026-05-19     | Commit 8fae2             |
-| 2026-05-20     | ADR-7 updated / PAY-42 resolved |
+| Date            | Event                                                     | Freshness Significance |
+|-----------------|-----------------------------------------------------------|------------------------|
+| 2026-05-01      | Architecture Overview (`doc:architecture-overview`)       | Review candidate (stale) |
+| 2026-05-10      | INC-17 (started)                                          | Precedes decision      |
+| 2026-05-11      | PAY-42 opened                                             | Precedes decision      |
+| 2026-05-15–17   | Redis / latency discussion (`message:payment-perf-7`)     | Precedes decision      |
+| 2026-05-18      | D-007 accepted (`decision:D-007`)                         | Architecture decision  |
+| 2026-05-19      | Commit `8fae2` (Redis implementation)                     | Architecture change    |
+| 2026-05-20      | ADR-7 updated (`doc:ADR-7`)                               | Current for D-007      |
+| 2026-05-22      | Runbook updated (`doc:runbook-payment-latency`)           | Current (negative case)|
 
 ## 6. Validation checks
 
@@ -106,16 +111,22 @@ Run `validate_dataset()` before any persistence. It checks:
 
 1. Non-empty canonical IDs
 2. Global uniqueness
-3. Required fields (Pydantic)
-4. Valid entity/source types
-5. Timestamp parsing
-6. Reference resolution
-7. Reference type compatibility
-8. D-007 completeness
-9. Redis chain completeness
-10. Structural relationships (ownership, dependencies)
-11. Alias integrity
-12. Credential/PII scanning
+3. Canonical ID format validity (valid prefix, no whitespace, valid characters)
+4. Required fields (Pydantic schemas)
+5. Valid entity/source types
+6. Timestamp parsing and chronological consistency (supporting evidence before decision, implementing commit after decision, incident before issue)
+7. Reference resolution
+8. Reference type compatibility (including `Document.describes -> Service`)
+9. D-007 completeness
+10. Redis decision chain completeness
+11. Structural relationships (ownership, dependencies, tech USES)
+12. Orphan Decisions check (every Decision must connect to at least one entity)
+13. Service ownership check (every Service must have an owning Team)
+14. Decision evidence check (every accepted Decision must have at least 2 evidence sources)
+15. Text integrity check (no empty text/description in issues, messages, commits, documents)
+16. Chunk/source provenance integrity (chunk source_id resolves, type matches)
+17. Alias integrity (targets exist, no empty/duplicate keys)
+18. Credential/PII scanning
 
 ## 7. Chunk contract
 
@@ -138,6 +149,8 @@ Every Chunk node is connected to its parent source entity:
 - `(:Chunk {id: "chunk:message:payment-perf-7:0"}) -[:FROM_MESSAGE]-> (:Message {id: "message:payment-perf-7"})`
 - `(:Chunk {id: "chunk:commit:8fae2:0"}) -[:FROM_COMMIT]-> (:Commit {id: "commit:8fae2"})`
 - `(:Chunk {id: "chunk:doc:ADR-7:0"}) -[:FROM_DOCUMENT]-> (:Document {id: "doc:ADR-7"})`
+- `(:Chunk {id: "chunk:doc:architecture-overview:0"}) -[:FROM_DOCUMENT]-> (:Document {id: "doc:architecture-overview"})`
+- `(:Chunk {id: "chunk:doc:runbook-payment-latency:0"}) -[:FROM_DOCUMENT]-> (:Document {id: "doc:runbook-payment-latency"})`
 
 ### Exact Retrieval Interface
 `find_sources()` in `weave_data.retrieval` provides deterministic source-evidence lookup without text fabrication:
@@ -152,42 +165,16 @@ def find_sources(
 ) -> list[SourceRecord]:
 ```
 
-- With no `adapter`, retrieval preserves the local-data flow: it uses supplied
-  `chunks` and `records` together, otherwise loads NovaPay records and creates
-  chunks from the local data directory.
-- With an explicitly supplied adapter, retrieval calls
-  `adapter.get_chunks_for_sources(source_ids)` and uses only persisted `Chunk`
-  properties connected by the four `FROM_*` provenance relationships. It never
-  falls back to local files if the graph query fails.
-- `get_chunks_for_sources()` returns dictionaries containing `source_id`,
-  `id`, `source_type`, `chunk_index`, `title`, `text`, `timestamp`, and `url`.
-  `find_sources()` deduplicates input IDs, orders multiple chunks by
-  `chunk_index`, joins their stored text, and returns `SourceRecord` objects
-  (`id`, `type`, `title`, `snippet`, `url`, `chunk_ids`).
-
-Example after ingestion:
-
-```python
-from weave_data.graph_adapter import InMemoryGraphAdapter
-from weave_data.ingest import run_ingestion
-from weave_data.retrieval import find_sources
-
-adapter = InMemoryGraphAdapter()
-run_ingestion(adapter=adapter)
-evidence = find_sources(["issue:PAY-42"], adapter=adapter)
-# evidence[0].chunk_ids == ["chunk:issue:PAY-42:0"]
-```
-
 ## 8. Alias contract
 
-`aliases.json` maps lowercase natural-language names to canonical IDs.
+`aliases.json` maps 29 lowercase natural-language names to canonical IDs.
 Used for deterministic entity resolution before semantic fallback.
 
 ## 9. Assumptions for Antony (Graph / FalkorDB)
 
 1. Node labels match `EntityType` values: `Person`, `Service`, `Decision`, `Technology`, `Commit`, `Chunk`, etc.
 2. Every node has an `id` property holding the canonical ID.
-3. Relationships use the labels from the mapping table above plus the 4 `FROM_*` chunk relationships (total 33 relationships).
+3. Relationships use the labels from the mapping table above plus the 6 `FROM_*` chunk relationships (total 44 relationships).
 4. `MERGE` on `{id: $id}` provides idempotent upserts.
 5. In `run_ingestion()`, source entity nodes and chunk nodes are persisted before relationships are created.
 6. The `prepare_ingestion()` function returns `(records, rel_ops, chunks, aliases, validation)` — Antony can consume `rel_ops` directly as `(source_id, rel_type, target_id)` tuples.

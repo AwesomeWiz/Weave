@@ -12,7 +12,7 @@
     "source": "hr",
     "entity_type": "Team",
     "name": "Platform",
-    "members": ["person:maya"],
-    "owns_services": []
+    "members": ["person:maya", "person:neeraj"],
+    "owns_services": ["service:checkout-service", "service:order-service"]
   }
 ]
