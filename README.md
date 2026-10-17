@@ -63,7 +63,9 @@ The factory provides async `trace_decision`, `impact_analysis` and graph-tool he
 
 Select **Impact Analysis** or ask **What depends on Payment Service?** The dedicated `POST /api/tools/impact-analysis` endpoint accepts `{"entity_id":"service:payment-service","max_depth":2}`. The UI shows direct and potential downstream findings, actual directed paths, available owners and related sources. Depth is 1–3, including the technology `USES` hop. Structural impact remains `partially_supported`; a related historical issue does not prove failure propagation. `/api/query` retains its original response schema.
 
-`/api/query` also supports bounded combined questions, such as **What led to Redis being introduced for Payment Service, and what services might be affected if Redis were removed?** Each capability validates independently before Context Builder V2 merges genuine evidence. See the [multi-tool handoff](docs/PHASE2_MULTITOOL_HANDOFF.md) for routing rules, support/failure behavior and future-tool registration. Expert Finder and Knowledge Freshness intents are recognized but never executed until their real implementations are registered.
+`/api/query` also supports bounded combined questions, such as **What led to Redis being introduced for Payment Service, and what services might be affected if Redis were removed?** Each capability validates independently before Context Builder V2 merges genuine evidence. See the [multi-tool handoff](docs/PHASE2_MULTITOOL_HANDOFF.md) for routing rules, support/failure behavior and future-tool registration. Expert Finder is now registered; Knowledge Freshness remains deferred.
+
+Select **Expert Finder** or ask **Who knows Payment Service?** The query-based `POST /api/tools/expert-finder` accepts `{"query":"Who knows Payment Service?","limit":5}` (limit 1–10). It returns fixed graph-backed rankings, contribution paths, and genuine citations, distinguishing team membership from personal ownership. The three-tool showcase **Why does Payment Service use Redis, who made the decision, and what would be affected if we removed it?** runs all three registered capabilities while preserving the original `/api/query` fields. See the [Expert Finder handoff](docs/PHASE2_EXPERT_FINDER_HANDOFF.md) for proof validation, topic ambiguity, bounded rankings, and live QA requirements. Development fixture mode has no fabricated expert directory and returns an explicitly qualified empty result.
 
 Without that implementation, the primary query returns HTTP **503 / GRAPH_UNAVAILABLE**. Health separately checks actual FalkorDB graph availability and tool availability; a reachable database alone is insufficient. The health probe only uses `GRAPH.LIST` and a bounded read-only graph query.
 
@@ -91,6 +93,7 @@ Decision Trace, Impact Analysis, and combined answers use constrained presentati
 ```powershell
 $env:PYTHONPATH = 'backend;.'
 $env:WEAVE_SOURCE_BACKEND = 'delegate' # isolate offline doubles from local .env configuration
+$env:WEAVE_LLM_PROVIDER = 'none' # offline runs never inherit a configured hosted provider
 .\.venv\Scripts\python.exe -m pytest backend\tests tests app\graph -q --basetemp=.local/pytest-check
 .\.venv\Scripts\python.exe -m ruff check --config backend\pyproject.toml backend
 npm.cmd --prefix frontend test
