@@ -1,4 +1,5 @@
 import { restoreEvidence } from './api';
+import { traceSequences } from './traceValidation';
 import type { ChangeInput, ExpertInput, FreshnessInput, ImpactInput, QueryResponse } from './types';
 
 export const MAX_CHATS = 20;
@@ -17,6 +18,7 @@ export interface ChatUI {
   tab: 'graph' | 'timeline' | 'sources' | 'relationships'; graphScope: 'focused' | 'all';
   selectedNodeId: string | null; selectedSourceId: string | null;
   highlightedPath: string[]; highlightedFinding: string | null; graphSearch: string; detailsOpen: boolean;
+  trace?: { sequenceId: string; step: number } | null;
 }
 export interface Conversation { id: string; title: string; createdAt: string; updatedAt: string; turns: ChatTurn[]; ui: ChatUI }
 export interface WorkspaceArchive { version: 1; activeId: string; conversations: Conversation[] }
@@ -26,7 +28,7 @@ export function blankUI(): ChatUI {
   let detailsOpen = true;
   try { detailsOpen = localStorage.getItem('weave.sidebar.right') !== 'collapsed'; } catch { /* Browser may block preferences. */ }
   return { input: '', selectedTurnId: null, view: 'chat', tab: 'graph', graphScope: 'focused', selectedNodeId: null,
-    selectedSourceId: null, highlightedPath: [], highlightedFinding: null, graphSearch: '', detailsOpen };
+    selectedSourceId: null, highlightedPath: [], highlightedFinding: null, graphSearch: '', detailsOpen, trace: null };
 }
 export function newConversation(): Conversation {
   const now = new Date().toISOString();
@@ -109,6 +111,15 @@ export function restoreArchive(value: unknown): WorkspaceArchive {
   const archive = value as unknown as WorkspaceArchive;
   assertStorageBounds(archive);
   // A refresh cannot continue an HTTP request. Keep its user message, permit an explicit retry.
-  return { ...archive, conversations: archive.conversations.map(c => ({ ...c, turns: c.turns.map(t => t.status === 'pending'
+  return { ...archive, conversations: archive.conversations.map(c => ({ ...c,
+    ui: { ...c.ui, trace: restoredTrace(c) }, turns: c.turns.map(t => t.status === 'pending'
     ? { ...t, status: 'error', error: { code: 'INTERRUPTED', message: 'This request was interrupted by refresh. Retry to run it again.' } } : t) })) };
+}
+
+function restoredTrace(chat: Conversation): ChatUI['trace'] {
+  const selected = chat.ui.trace;
+  const result = chat.turns.find(t => t.id === chat.ui.selectedTurnId)?.result ?? null;
+  if (!record(selected) || typeof selected.sequenceId !== 'string' || !Number.isInteger(selected.step)) return null;
+  const sequence = traceSequences(result).find(s => s.id === selected.sequenceId);
+  return sequence && selected.step >= 0 && selected.step < sequence.steps.length ? { sequenceId: selected.sequenceId, step: selected.step } : null;
 }

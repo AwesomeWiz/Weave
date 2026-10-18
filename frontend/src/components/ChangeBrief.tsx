@@ -1,5 +1,6 @@
-import type { ChangeEvidenceReference, ChangeResponse, ExpertEvidence, FreshnessPath, GraphNode, ImpactFinding, Source } from '../types';
+import type { ChangeEvidenceReference, ChangeResponse, ExpertEvidence, FreshnessPath, GraphNode, ImpactFinding, Source, TraceSequence } from '../types';
 import { CHANGE_TOOL_LABELS, historicalPathReference } from '../change';
+import { traceSequences } from '../traceValidation';
 import EntityIcon from './EntityIcon';
 import { SourceRow } from './Inspector';
 import { useState } from 'react';
@@ -12,11 +13,17 @@ function ProofDetails({ summary, children }: { summary: ReactNode; children: Rea
   </details>;
 }
 
-export default function ChangeBrief({ result, onNode, onSource, onPath, onEvidence }: {
+export default function ChangeBrief({ result, onNode, onSource, onPath, onEvidence, onTrace }: {
   result: ChangeResponse; onNode: (node: GraphNode) => void; onSource: (source: Source) => void;
   onPath: (finding: ImpactFinding) => void; onEvidence: (ref: ChangeEvidenceReference) => void;
+  onTrace?: (sequence: TraceSequence) => void;
 }) {
   const { data } = result;
+  const playback = traceSequences(result);
+  function traceButton(tool: TraceSequence['tool'], pathId: string) {
+    const sequence = playback.find(s => s.tool === tool && s.path_id === pathId);
+    return sequence && onTrace && <button className="button small" onClick={() => onTrace(sequence)}>Trace {tool === 'decision_trace' ? 'historical' : 'impact'} path {pathId}</button>;
+  }
   const nodes = new Map(result.graph.nodes.map(n => [n.id, n]));
   const sources = new Map(result.sources.map(s => [s.id, s]));
   const sectionNames = ['Proposed Change', 'Historical Context', 'Direct and Downstream Impact', 'Relevant Reviewers',
@@ -57,6 +64,7 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
       <code>{f.service_id}</code>{directed(f.path_edges)}
       <p className="small muted">Returned owners / teams: {f.owners.length ? f.owners.map(o => <span key={o.id}>{entity(o.id)} </span>) : 'Not returned'}</p>
       <button className="button small" onClick={() => onPath(f)}>Highlight path to {nodes.get(f.service_id)?.label ?? f.service_id}</button>
+      {traceButton('impact_analysis', f.service_id)}
       {f.source_ids.length ? <p className="small muted">Related historical sources; they do not establish failure propagation. {citations(f.source_ids)}</p>
         : <p className="small muted">Structural graph evidence; no textual propagation evidence returned.</p>}
     </div>) : <p className="muted">No independently validated {title.toLowerCase()} findings returned.</p>}</div>;
@@ -88,6 +96,7 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
             <ol>{path.steps.map((step, i) => <li key={i}>{directed([step])}
               <p className="small muted"><code>{step.source}</code> → <code>{step.target}</code></p></li>)}</ol>
             {reference && <button className="button small" onClick={() => onEvidence(reference)}>Highlight historical path {path.id}</button>}
+            {traceButton('decision_trace', path.id)}
             <p className="small muted">Stored graph relationships; this path assigns no additional textual citations.</p>
           </article>;
         }) : <p className="small muted">No ordered historical paths were returned. No sequence has been inferred from the graph.</p>}

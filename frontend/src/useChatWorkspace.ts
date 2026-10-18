@@ -68,7 +68,15 @@ export function useChatWorkspace(repository: ChatRepository = browserChatReposit
     if (!state.conversations.some(c => c.id === id)) return; // Deleted requests cannot resurrect a conversation.
     commit({ ...state, conversations: state.conversations.map(c => c.id === id ? fn(c) : c) }, immediate);
   }
-  function ui(id: string, patch: Partial<ChatUI>) { update(id, c => ({ ...c, ui: { ...c.ui, ...patch } })); }
+  function ui(id: string, patch: Partial<ChatUI>, playbackOwner?: { turnId: string; sequenceId: string; step: number }) {
+    update(id, c => {
+      // Also guard callbacks already queued when a playback component unmounts.
+      if (playbackOwner && (current.current.activeId !== id || c.ui.selectedTurnId !== playbackOwner.turnId
+        || c.ui.view !== 'graph' || c.ui.tab !== 'graph' || c.ui.trace?.sequenceId !== playbackOwner.sequenceId
+        || c.ui.trace.step !== playbackOwner.step)) return c;
+      return { ...c, ui: { ...c.ui, ...patch } };
+    });
+  }
   function create() {
     if (!ready) return;
     if (current.current.conversations.length >= MAX_CHATS) { setWorkspaceNotice(`The ${MAX_CHATS}-chat limit is reached. Delete a chat before starting another.`); return; }

@@ -50,8 +50,8 @@ function InitialFit({ visible, fitNodeIds, graphKey }: { visible: boolean; fitNo
   return null;
 }
 
-export default function EvidenceGraph({ graph, onSelect, selectedId, highlightedEdgeIds = [], emphasizedNodeIds = [], fitNodeIds = [], expanded = false, visible = true }: {
-  graph: Graph; onSelect: (node: GraphNode) => void; selectedId?: string; highlightedEdgeIds?: string[]; emphasizedNodeIds?: string[]; fitNodeIds?: string[]; expanded?: boolean; visible?: boolean;
+export default function EvidenceGraph({ graph, onSelect, selectedId, highlightedEdgeIds = [], emphasizedNodeIds = [], traceNodeIds = [], fitNodeIds = [], expanded = false, visible = true }: {
+  graph: Graph; onSelect: (node: GraphNode) => void; selectedId?: string; highlightedEdgeIds?: string[]; emphasizedNodeIds?: string[]; traceNodeIds?: string[]; fitNodeIds?: string[]; expanded?: boolean; visible?: boolean;
 }) {
   const { nodes, edges } = useMemo(() => {
     const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
@@ -122,15 +122,15 @@ export default function EvidenceGraph({ graph, onSelect, selectedId, highlighted
     graph.edges.forEach(e => { if (e.source === selectedId) neighbors.add(e.target); if (e.target === selectedId) neighbors.add(e.source); });
     return {
       nodes: nodes.map(node => ({ ...node, selected: node.id === selectedId,
-        className: selectedId && neighbors.has(node.id) ? 'connected-node' : '',
-        style: { opacity: selectedId ? (!neighbors.has(node.id) ? 0.75 : 1) : emphasizedNodeIds.length && !emphasizedNodeIds.includes(node.id) ? 0.65 : 1 } })),
+        className: traceNodeIds.length ? traceNodeIds.includes(node.id) ? 'trace-node' : '' : selectedId && neighbors.has(node.id) ? 'connected-node' : '',
+        style: { opacity: traceNodeIds.length ? traceNodeIds.includes(node.id) ? 1 : 0.55 : selectedId ? (!neighbors.has(node.id) ? 0.75 : 1) : emphasizedNodeIds.length && !emphasizedNodeIds.includes(node.id) ? 0.65 : 1 } })),
       edges: edges.map(edge => {
         const connected = highlightedEdgeIds.length ? highlightedEdgeIds.includes(edge.id) : edge.source === selectedId || edge.target === selectedId;
         return { ...edge, style: { ...edge.style, stroke: connected ? '#315d48' : '#7b9181', strokeWidth: connected ? 2.4 : 1.3, opacity: selectedId && !connected ? 0.55 : 1 },
           markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: connected ? '#315d48' : '#7b9181' } };
       }),
     };
-  }, [nodes, edges, graph.edges, selectedId, highlightedEdgeIds, emphasizedNodeIds]);
+  }, [nodes, edges, graph.edges, selectedId, highlightedEdgeIds, emphasizedNodeIds, traceNodeIds]);
 
   if (!graph.nodes.length) return <div className="graph-empty"><GitEmpty />No connected graph evidence was returned.</div>;
   return <div className={`graph-canvas ${expanded ? 'expanded' : ''}`} aria-label="Evidence graph">
