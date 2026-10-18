@@ -56,6 +56,7 @@ class TraceInput(BaseModel):
 
 class TracePathStep(BaseModel):
     """One stored directed relationship in an ordered Decision Trace path."""
+    model_config = ConfigDict(extra="forbid", strict=True)
     source: str = Field(min_length=1)
     type: str = Field(min_length=1)
     target: str = Field(min_length=1)
@@ -63,7 +64,8 @@ class TracePathStep(BaseModel):
 
 class TraceRelationshipPath(BaseModel):
     """A named, ordered path returned by the graph trace tool."""
-    id: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(min_length=1, max_length=128)
     steps: list[TracePathStep] = Field(min_length=1, max_length=10)
 
 
@@ -72,7 +74,7 @@ class TraceResult(BaseModel):
     graph: EvidenceGraph = Field(default_factory=EvidenceGraph)
     source_ids: list[str] = Field(default_factory=list)
     decision_ids: list[str] = Field(default_factory=list)
-    relationship_paths: list[TraceRelationshipPath] = Field(default_factory=list)
+    relationship_paths: list[TraceRelationshipPath] = Field(default_factory=list, max_length=80)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -334,6 +336,7 @@ class ChangeHistoricalContext(BaseModel):
     summary: str = "No validated historical rationale was retrieved."
     decision_ids: list[str] = Field(default_factory=list, max_length=30)
     evidence: ChangeEvidenceReference | None = None
+    relationship_paths: list[TraceRelationshipPath] = Field(default_factory=list, max_length=80)
 
 
 class ChangeImpact(ImpactData):

@@ -75,7 +75,11 @@ export interface ChangeTarget {
 }
 export interface ChangeHistoricalContext {
   support_status: SupportStatus; summary: string; decision_ids: string[]; evidence: ChangeEvidenceReference | null;
+  /** Optional for compatibility with earlier dedicated endpoint responses. */
+  relationship_paths?: TraceRelationshipPath[];
 }
+export interface TracePathStep { source: string; type: string; target: string }
+export interface TraceRelationshipPath { id: string; steps: TracePathStep[] }
 export type ChangeImpact = ImpactResponse['data'] & {
   support_status: SupportStatus; max_depth: number;
 }

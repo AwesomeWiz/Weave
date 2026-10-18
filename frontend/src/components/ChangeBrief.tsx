@@ -1,5 +1,5 @@
 import type { ChangeEvidenceReference, ChangeResponse, ExpertEvidence, FreshnessPath, GraphNode, ImpactFinding, Source } from '../types';
-import { CHANGE_TOOL_LABELS } from '../change';
+import { CHANGE_TOOL_LABELS, historicalPathReference } from '../change';
 import EntityIcon from './EntityIcon';
 import { SourceRow } from './Inspector';
 import { useState } from 'react';
@@ -79,6 +79,19 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
     <section id="change-section-1" className="change-section" aria-label={sectionNames[1]}><h3>02 <span>Historical Context</span></h3>
       <p className={`support-badge ${data.historical_context.support_status}`}>{data.historical_context.support_status.replaceAll('_', ' ')}</p>
       <div className="change-narrative">{narrative(data.historical_context.summary)}</div>
+      <div className="change-history-paths"><h4>Ordered historical evidence paths</h4>
+        <p className="small muted">Each path preserves returned relationship direction and step order. Separate paths do not form a single timeline or an impact traversal.</p>
+        {data.historical_context.relationship_paths?.length ? data.historical_context.relationship_paths.map(path => {
+          const reference = historicalPathReference(result, path);
+          return <article key={path.id} aria-label={`Historical path ${path.id}`}>
+            <h4><code>{path.id}</code></h4>
+            <ol>{path.steps.map((step, i) => <li key={i}>{directed([step])}
+              <p className="small muted"><code>{step.source}</code> → <code>{step.target}</code></p></li>)}</ol>
+            {reference && <button className="button small" onClick={() => onEvidence(reference)}>Highlight historical path {path.id}</button>}
+            <p className="small muted">Stored graph relationships; this path assigns no additional textual citations.</p>
+          </article>;
+        }) : <p className="small muted">No ordered historical paths were returned. No sequence has been inferred from the graph.</p>}
+      </div>
       {data.historical_context.evidence && evidence([data.historical_context.evidence])}
     </section>
     <section id="change-section-2" className="change-section" aria-label={sectionNames[2]}><h3>03 <span>Direct and Downstream Impact</span></h3>

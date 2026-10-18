@@ -36,10 +36,9 @@ def _trace(result, records, arguments):
     paths = tuple(
         tuple(edge_ids[(step.source, step.type, step.target)] for step in path.steps)
         for path in result.relationship_paths
-        if all((step.source, step.type, step.target) in edge_ids for step in path.steps)
     ) or tuple((edge.id,) for edge in context.graph.edges)
     return ToolEvidence("decision_trace", "Decision Trace", "trace_decision", context,
-                        paths)
+                        paths, ordered_paths=tuple(result.relationship_paths))
 
 
 def _impact(result, records, arguments):

@@ -43,6 +43,9 @@ def prepare_change_synthesis(data: ChangeBriefData, context: CombinedContext) ->
         if p.state == "validated":
             reference(support.evidence)
     history = data.historical_context
+    trace = context.per_tool.get("decision_trace")
+    if history.relationship_paths != list(trace.ordered_paths if trace and trace.state == "validated" else ()):
+        raise ValueError("Historical paths differ from validated Decision Trace provenance")
     if history.evidence:
         reference(history.evidence)
     accepted = [id for id in history.decision_ids if id in nodes and nodes[id].type == "Decision"

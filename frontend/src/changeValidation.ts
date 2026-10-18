@@ -80,6 +80,25 @@ export function validChangeData(value: unknown, response: QueryResponse, request
     || !quoted(history.summary, ref(history.evidence) ? history.evidence.source_ids : [])) return false;
   if (ref(history.evidence) ? !record(support.decision_trace) || history.support_status !== support.decision_trace.support_status
     : history.support_status !== 'insufficient_evidence' || history.decision_ids.length > 0) return false;
+  if (history.relationship_paths !== undefined) {
+    const names = new Set<string>();
+    if (!list(history.relationship_paths, 80) || !history.relationship_paths.every(p => {
+      if (!record(p) || Object.keys(p).some(k => !['id', 'steps'].includes(k))
+        || !text(p.id) || !p.id.length || p.id.length > 128 || names.has(p.id)
+        || !ref(history.evidence) || !path(p.steps, 'decision_trace', 10)
+        || !p.steps.every((s, i, steps) => Object.keys(s).every(k => ['source', 'type', 'target'].includes(k))
+          && (!i || steps[i - 1].target === s.source))) return false;
+      names.add(p.id);
+      const evidence = history.evidence;
+      const steps = p.steps;
+      // Membership in the merged graph alone is insufficient. Require this
+      // exact sequence in the historical capability's returned edge-ID proof.
+      return evidence.relationship_paths.some(sequence => sequence.length === steps.length && sequence.every((id, i) => {
+        const edge = edges.get(id); const step = steps[i];
+        return evidence.edge_ids.includes(id) && !!edge && edge.source === step.source && edge.type === step.type && edge.target === step.target;
+      }));
+    })) return false;
+  }
 
   const impact = value.impact;
   if (!status(impact.support_status) || !Number.isInteger(impact.max_depth) || Number(impact.max_depth) < 1 || Number(impact.max_depth) > 3

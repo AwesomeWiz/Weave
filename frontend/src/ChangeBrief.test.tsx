@@ -6,6 +6,7 @@ import { analyzeChange, analyzeImpact, ApiError, askQuestion, checkFreshness, fi
 import { CHANGE_QUESTION } from './change';
 import { changeFixture } from './test/changeFixture';
 import { changeWithoutSources, unresolvedChange } from './test/changeTestCases';
+import { changeWithOrderedPaths } from './test/orderedTraceFixture';
 import type { EvidenceGraph, GraphNode } from './types';
 
 vi.mock('./api', async original => ({ ...await original<typeof import('./api')>(), analyzeChange: vi.fn(),
@@ -31,6 +32,42 @@ async function openBrief() {
 }
 
 describe('structured Change Brief in the existing workspace', () => {
+  it('renders ordered historical steps and inspects their actual nodes', async () => {
+    vi.mocked(analyzeChange).mockResolvedValue(changeWithOrderedPaths());
+    const user = await openBrief();
+    const path = screen.getByRole('article', { name: 'Historical path decision_to_current_architecture' });
+    const steps = within(path).getAllByRole('listitem');
+    expect(steps).toHaveLength(3);
+    for (const [i, relation] of ['IMPLEMENTED_BY', 'CHANGES', 'USES'].entries()) expect(steps[i]).toHaveTextContent(relation);
+    expect(steps[0]).toHaveTextContent('decision:D-007'); expect(steps[0]).toHaveTextContent('commit:8fae2');
+    expect(steps[1]).toHaveTextContent('service:payment-service'); expect(steps[2]).toHaveTextContent('tech:redis');
+    expect(path).toHaveTextContent('this path assigns no additional textual citations');
+    expect(screen.getByText(/Separate paths do not form a single timeline or an impact traversal/)).toBeInTheDocument();
+    await user.click(within(path).getAllByRole('button', { name: 'Payment Service' })[0]);
+    expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('service:payment-service');
+    expect(analyzeChange).toHaveBeenCalledTimes(1);
+  });
+  it('highlights the exact historical sequence separately from impact paths', async () => {
+    const result = changeWithOrderedPaths(); vi.mocked(analyzeChange).mockResolvedValue(result);
+    const user = await openBrief();
+    await user.click(screen.getByRole('button', { name: 'Highlight historical path decision_to_current_architecture' }));
+    const graph = screen.getByTestId('change-graph');
+    expect(graph.getAttribute('data-highlighted')?.split(',')).toEqual([
+      'decision:D-007|IMPLEMENTED_BY|commit:8fae2',
+      'commit:8fae2|CHANGES|service:payment-service',
+      'service:payment-service|USES|tech:redis',
+    ]);
+    expect(graph.getAttribute('data-highlighted')).not.toContain('DEPENDS_ON');
+    await user.click(screen.getByRole('button', { name: 'Back to answer' }));
+    expect(screen.getByRole('article', { name: 'Historical path decision_to_current_architecture' })).toBeInTheDocument();
+    expect(analyzeChange).toHaveBeenCalledTimes(1); expect(result.data.reviewers).toEqual(changeFixture.data.reviewers);
+  });
+  it('keeps legacy historical evidence without inventing ordered paths', async () => {
+    await openBrief();
+    expect(screen.getByText('No ordered historical paths were returned. No sequence has been inferred from the graph.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Highlight historical path/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Historical Context' })).toHaveTextContent('issue:PAY-42');
+  });
   it('surfaces a hosted overview with working citations and unchanged structured sections', async () => {
     const hosted = structuredClone(changeFixture);
     hosted.metadata.generation = 'openrouter';

@@ -1,4 +1,4 @@
-import type { ChangeEvidenceReference, ChangeInput, ChangeResponse, EvidenceGraph, QueryResponse } from './types';
+import type { ChangeEvidenceReference, ChangeInput, ChangeResponse, EvidenceGraph, QueryResponse, TraceRelationshipPath } from './types';
 
 export const CHANGE_QUESTION = 'What happens if we remove Redis from Payment Service?';
 export const CHANGE_TOOL_LABELS = {
@@ -18,6 +18,28 @@ export function routeChangeQuestion(question: string): ChangeInput | null {
 
 export function isChangeResponse(result: QueryResponse): result is ChangeResponse {
   return 'data' in result && typeof result.data === 'object' && result.data !== null && 'proposed_change' in result.data;
+}
+
+/** Highlight only the selected returned historical path, never a guessed walk. */
+export function historicalPathReference(result: ChangeResponse, path: TraceRelationshipPath): ChangeEvidenceReference | null {
+  const history = result.data.historical_context;
+  const evidence = history.evidence;
+  const paths = history.relationship_paths;
+  if (!evidence || evidence.tool !== 'decision_trace' || !Array.isArray(paths) || paths.length > 80
+    || new Set(paths.map(p => p.id)).size !== paths.length || !path.id.length || path.id.length > 128
+    || Object.keys(path).some(k => !['id', 'steps'].includes(k)) || !path.steps.length || path.steps.length > 10
+    || path.steps.some(s => Object.keys(s).some(k => !['source', 'type', 'target'].includes(k)))
+    || !history.relationship_paths?.some(p => JSON.stringify(p) === JSON.stringify(path))) return null;
+  const sequence = evidence.relationship_paths.find(ids => ids.length === path.steps.length && ids.every((id, i) => {
+    const edge = result.graph.edges.find(e => e.id === id);
+    const step = path.steps[i];
+    return evidence.edge_ids.includes(id) && edge?.source === step.source && edge.type === step.type && edge.target === step.target
+      && evidence.node_ids.includes(step.source) && evidence.node_ids.includes(step.target)
+      && (!i || path.steps[i - 1].target === step.source);
+  }));
+  if (!sequence) return null;
+  return { tool: 'decision_trace', node_ids: [...new Set(path.steps.flatMap(s => [s.source, s.target]))],
+    edge_ids: [...sequence], source_ids: [], relationship_paths: [[...sequence]] };
 }
 
 /** A subset of returned evidence, not a reconstructed historical path. */

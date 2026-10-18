@@ -6,6 +6,8 @@ Latest backend foundation: [Phase 3 Change Intelligence](PHASE3_CHANGE_BACKEND_H
 
 Phase 3 presentation: [React Change Brief](PHASE3_CHANGE_FRONTEND_HANDOFF.md) and [grounded OpenRouter integration](PHASE3_CHANGE_OPENROUTER_HANDOFF.md), including the finite presentation contract, offline checks, and Arnold's pending live FalkorDB acceptance plan.
 
+Latest Phase 3 integration: [Antony's ordered Decision Trace paths](PHASE3_ORDERED_PATH_INTEGRATION_HANDOFF.md), including the verified merged commit, historical path API, tool-local provenance checks, UI highlighting and pending combined live QA.
+
 Phase 2 integration: [Knowledge Freshness](PHASE2_FRESHNESS_HANDOFF.md), including four-tool routing and provenance validation. See the Phase 2 QA report for its subsequent live acceptance.
 
 Orchestration background: [Multi-tool routing and Context Builder V2](PHASE2_MULTITOOL_HANDOFF.md), including the unchanged query response contract and graph-tool extension instructions.

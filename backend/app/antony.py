@@ -4,6 +4,7 @@ import asyncio
 from pydantic import ValidationError
 
 from .config import Settings
+from .context import validate_trace_paths
 from .graph import GraphContractError
 from .models import ExpertInput, ExpertResult, FreshnessInput, FreshnessResult, ImpactInput, ImpactResult, TraceInput, TraceResult
 
@@ -38,7 +39,7 @@ def normalize_trace(payload: dict) -> TraceResult:
         if not isinstance(data, dict) or not isinstance(sources, list):
             raise ValueError("Invalid trace envelope")
         if decision is None:
-            if nodes or edges or sources:
+            if nodes or edges or sources or data.get("relationship_paths"):
                 raise ValueError("Evidence without a selected decision")
             return TraceResult(warnings=payload.get("warnings") or [
                 "No decision found for the requested service and technology."])
@@ -67,24 +68,7 @@ def normalize_trace(payload: dict) -> TraceResult:
         if (not any(e.type == "USES" for e in trace.graph.edges)
                 and not any("USES" in warning for warning in trace.warnings)):
             trace.warnings.append("The trace tool did not return a Service USES Technology relationship.")
-        graph_node_ids = {node.id for node in trace.graph.nodes}
-        graph_edges = {
-            (edge.source, edge.type, edge.target)
-            for edge in trace.graph.edges
-        }
-        for path in trace.relationship_paths:
-            if any(
-                step.source not in graph_node_ids
-                or step.target not in graph_node_ids
-                or (step.source, step.type, step.target) not in graph_edges
-                for step in path.steps
-            ):
-                raise ValueError("Ordered trace path contains an unreturned relationship")
-            if any(
-                current.target != following.source
-                for current, following in zip(path.steps, path.steps[1:])
-            ):
-                raise ValueError("Ordered trace path is not directed and contiguous")
+        trace.relationship_paths = validate_trace_paths(trace.relationship_paths, trace.graph)
         return trace
     except (KeyError, TypeError, ValueError, ValidationError) as exc:
         raise GraphContractError("Invalid teammate decision trace") from exc

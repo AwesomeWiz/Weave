@@ -371,6 +371,9 @@ def test_future_document_review_requires_a_genuine_local_association(freshness_d
             graph = result.graph if hasattr(result, "graph") else result
             graph.edges = [e for e in graph.edges if not (e.target == "doc:ADR-7" and e.type == "DOCUMENTED_IN")
                            and not (e.source == "doc:ADR-7" and e.type == "DESCRIBES")]
+            if hasattr(result, "relationship_paths"):
+                result.relationship_paths = [p for p in result.relationship_paths
+                                             if not any(s.type == "DOCUMENTED_IN" and s.target == "doc:ADR-7" for s in p.steps)]
             return result
         monkeypatch.setattr(gateway, name, disconnect)
     response = post(freshness_db, gateway)

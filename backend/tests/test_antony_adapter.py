@@ -173,6 +173,9 @@ def test_retrieved_message_path_can_ground_rationale_without_issue_path(merged_d
     sources = asyncio.run(gateway.find_sources(trace.source_ids))
     trace.graph.edges = [e for e in trace.graph.edges
                          if not (e.type == "SUPPORTED_BY" and e.target == "issue:PAY-42")]
+    # Simulate a coherent reduced tool result, not an intentionally stale path.
+    trace.relationship_paths = [p for p in trace.relationship_paths
+                                if not any(s.type == "SUPPORTED_BY" and s.target == "issue:PAY-42" for s in p.steps)]
     context = build_context(trace, sources, TARGET)
     assert context.status == "supported" and context.can_explain
     assert "[message:payment-perf-7]" in context.summary
@@ -185,6 +188,7 @@ def test_actual_pipeline_cannot_ground_rationale_without_retrieved_path(merged_d
     sources = asyncio.run(gateway.find_sources(trace.source_ids))
     kinds = {"SUPPORTED_BY"} if missing == "decision_support" else {"FROM_ISSUE", "FROM_MESSAGE"}
     trace.graph.edges = [e for e in trace.graph.edges if e.type not in kinds]
+    trace.relationship_paths = [p for p in trace.relationship_paths if not any(s.type in kinds for s in p.steps)]
     context = build_context(trace, sources, TARGET)
     assert context.status == "partially_supported" and not context.can_explain
 

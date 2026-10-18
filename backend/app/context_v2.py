@@ -6,9 +6,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .context import EvidenceContext
+from .context import EvidenceContext, validate_trace_paths
 from .graph import GraphContractError
-from .models import EvidenceGraph, GraphEdge, GraphNode, Source, SupportStatus
+from .models import EvidenceGraph, GraphEdge, GraphNode, Source, SupportStatus, TraceRelationshipPath
 
 
 class ContextEntity(GraphNode):
@@ -47,6 +47,7 @@ class ToolEvidence:
     relationship_paths: tuple[tuple[str, ...], ...] = ()
     # Optional structured output, populated only by the capability's validator.
     data: BaseModel | None = None
+    ordered_paths: tuple[TraceRelationshipPath, ...] = ()
 
 
 @dataclass
@@ -59,6 +60,7 @@ class ToolProvenance:
     state: Literal["validated", "unavailable", "invalid", "unregistered"] = "validated"
     summary: str = ""
     data: BaseModel | None = None
+    ordered_paths: tuple[TraceRelationshipPath, ...] = ()
 
 
 @dataclass
@@ -139,6 +141,14 @@ def merge_contexts(results: list[ToolEvidence], limitations: list[str] | None = 
         for path in result.relationship_paths:
             if not path or any(id not in local_edges for id in path):
                 raise GraphContractError("Tool traversal contains an unreturned edge")
+        if result.ordered_paths and tool != "decision_trace":
+            raise GraphContractError("Ordered historical paths belong to Decision Trace only")
+        ordered = validate_trace_paths(list(result.ordered_paths), context.graph)
+        original_edges = {e.id: e for e in context.graph.edges}
+        sequences = [tuple((original_edges[id].source, original_edges[id].type, original_edges[id].target)
+                           for id in path) for path in result.relationship_paths]
+        if any(tuple((s.source, s.type, s.target) for s in p.steps) not in sequences for p in ordered):
+            raise GraphContractError("Ordered path differs from its tool-local edge sequence")
         validate_source_records(context.sources)
         for source in context.sources:
             if (not source.id.strip() or not source.snippet.strip()
@@ -165,6 +175,7 @@ def merge_contexts(results: list[ToolEvidence], limitations: list[str] | None = 
             tuple(tuple(local_edges[id] for id in path) for path in result.relationship_paths),
             summary=context.summary,
             data=result.data.model_copy(deep=True) if result.data is not None else None,
+            ordered_paths=tuple(ordered),
         )
         # Keep narratives distinct. Already-cited historical sources remain in
         # the packet/inspector; avoid repeating their excerpts in a sibling summary.

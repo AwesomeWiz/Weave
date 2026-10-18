@@ -184,6 +184,7 @@ def test_missing_trace_provenance_cannot_gain_hosted_rationale_citations(freshne
     async def missing(query):
         result = await original(query)
         result.graph.edges = [e for e in result.graph.edges if e.type != "SUPPORTED_BY"]
+        result.relationship_paths = [p for p in result.relationship_paths if not any(s.type == "SUPPORTED_BY" for s in p.steps)]
         return result
     monkeypatch.setattr(gateway, "trace_decision", missing)
     result = post(enabled(freshness_db), gateway).json()

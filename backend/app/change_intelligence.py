@@ -11,12 +11,13 @@ from pydantic import ValidationError
 from .citations import validate_citations
 from .change_synthesis import prepare_change_synthesis
 from .context_v2 import CombinedContext
+from .context import validate_trace_paths
 from .graph import GraphContractError, GraphGateway
 from .models import (
     ChangeBriefData, ChangeDocumentReview, ChangeEvidenceReference, ChangeHistoricalContext,
     ChangeImpact, ChangeInput, ChangeResponse, ChangeReviewer, ChangeRisk, ChangeTarget,
     ChangeToolSupport, ChangeValidationStep, ExpertData, ExpertInput, FreshnessData,
-    FreshnessInput, ImpactData, ImpactInput, Metadata, TraceInput,
+    EvidenceGraph, FreshnessInput, ImpactData, ImpactInput, Metadata, TraceInput,
 )
 from .orchestration import execute_plan
 from .router import IMPACT_ALIASES, RoutingPlan, ToolCall
@@ -108,10 +109,16 @@ def _build(context: CombinedContext, proposed: ChangeTarget) -> ChangeBriefData:
         data.tool_support[tool] = ChangeToolSupport(support_status=p.status, state=p.state, evidence=reference)
     trace = context.per_tool.get("decision_trace")
     if trace and trace.state == "validated":
+        ordered = validate_trace_paths(list(trace.ordered_paths), EvidenceGraph(
+            nodes=[nodes[id] for id in trace.node_ids], edges=[edges[id] for id in trace.edge_ids]))
+        sequences = [tuple((edges[id].source, edges[id].type, edges[id].target) for id in path)
+                     for path in trace.relationship_paths]
+        if any(tuple((s.source, s.type, s.target) for s in p.steps) not in sequences for p in ordered):
+            raise GraphContractError("Historical path differs from its validated edge sequence")
         data.historical_context = ChangeHistoricalContext(
             support_status=trace.status, summary=trace.summary,
             decision_ids=[id for id in trace.node_ids if nodes[id].type == "Decision"],
-            evidence=_whole_reference(context, "decision_trace"))
+            evidence=_whole_reference(context, "decision_trace"), relationship_paths=ordered)
 
     # A proposal must be anchored in an actual local Service USES Technology edge.
     anchors = [(tool, e) for tool, p in context.per_tool.items() if p.state == "validated"
