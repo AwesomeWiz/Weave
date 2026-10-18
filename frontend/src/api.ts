@@ -68,6 +68,10 @@ async function postEvidence(path: string, body: unknown): Promise<QueryResponse>
     throw new ApiError(error && typeof error.message === 'string' ? error.message : 'Weave could not complete the request.',
       error && typeof error.code === 'string' ? error.code : 'REQUEST_FAILED');
   }
+  return parseEvidence(data);
+}
+
+function parseEvidence(data: unknown): QueryResponse {
   if (!record(data) || typeof data.answer !== 'string'
     || !['supported', 'partially_supported', 'insufficient_evidence'].includes(String(data.support_status))
     || !Array.isArray(data.sources) || !record(data.graph)
@@ -93,6 +97,10 @@ export async function analyzeChange(request: ChangeInput): Promise<ChangeRespons
 
 export async function analyzeImpact(request: ImpactInput): Promise<ImpactResponse> {
   const response = await postEvidence('/api/tools/impact-analysis', request);
+  return parseImpact(response, request);
+}
+
+function parseImpact(response: QueryResponse, request: ImpactInput): ImpactResponse {
   const data: unknown = (response as ImpactResponse).data;
   const ids = new Map(response.graph.nodes.map(n => [n.id, n]));
   const citations = new Set(response.sources.map(s => s.id));
@@ -136,6 +144,10 @@ export async function analyzeImpact(request: ImpactInput): Promise<ImpactRespons
 
 export async function findExperts(request: ExpertInput): Promise<ExpertResponse> {
   const response = await postEvidence('/api/tools/expert-finder', request);
+  return parseExperts(response, request);
+}
+
+function parseExperts(response: QueryResponse, request: ExpertInput): ExpertResponse {
   const data: unknown = (response as ExpertResponse).data;
   const nodes = new Map(response.graph.nodes.map(n => [n.id, n]));
   const sourceIds = new Set(response.sources.map(s => s.id));
@@ -174,6 +186,10 @@ export async function findExperts(request: ExpertInput): Promise<ExpertResponse>
 
 export async function checkFreshness(request: FreshnessInput): Promise<FreshnessResponse> {
   const response = await postEvidence('/api/tools/freshness', request);
+  return parseFreshness(response, request);
+}
+
+function parseFreshness(response: QueryResponse, request: FreshnessInput): FreshnessResponse {
   const data: unknown = (response as FreshnessResponse).data;
   const nodes = new Map(response.graph.nodes.map(n => [n.id, n]));
   const sourceIds = new Set(response.sources.map(s => s.id));
@@ -225,6 +241,21 @@ export async function checkFreshness(request: FreshnessInput): Promise<Freshness
       seen.add(f.document_id); return true;
     })) throw new ApiError('The API returned an incompatible Knowledge Freshness format.', 'INVALID_RESPONSE');
   return response as FreshnessResponse;
+}
+
+/** Reuse the live display boundary for local history, with zero network requests. */
+export function restoreEvidence(value: unknown, request: {
+  change: ChangeInput | null; impact: ImpactInput | null; expert: ExpertInput | null; freshness: FreshnessInput | null;
+}): QueryResponse {
+  const response = parseEvidence(value);
+  if (request.change) {
+    const data: unknown = 'data' in response ? response.data : undefined;
+    if (!validChangeData(data, response, request.change)) throw new ApiError('Invalid saved Change Brief.', 'INVALID_RESPONSE');
+  } else if (request.impact) parseImpact(response, request.impact);
+  else if (request.expert) parseExperts(response, request.expert);
+  else if (request.freshness) parseFreshness(response, request.freshness);
+  else if ('data' in response) throw new ApiError('Unrecognized saved tool response.', 'INVALID_RESPONSE');
+  return response;
 }
 
 export async function getHealth(): Promise<Health> {

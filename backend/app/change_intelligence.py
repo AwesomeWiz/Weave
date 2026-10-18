@@ -22,6 +22,7 @@ from .models import (
 from .orchestration import execute_plan
 from .router import IMPACT_ALIASES, RoutingPlan, ToolCall
 from .synthesis import SynthesisPacket
+from .trace_playback import build_trace_playback
 
 SERVICE = "service:payment-service"
 TECHNOLOGY = "tech:redis"
@@ -282,6 +283,7 @@ async def analyze_change(request: ChangeInput | str, gateway: GraphGateway, grap
     context, tools = await execute_plan(change_plan(), gateway)
     try:
         data = _build(context, proposed)
+        data.trace_playback = build_trace_playback(data, context)
         # Enforce list limits after deterministic construction, as well as byte bounds.
         data = ChangeBriefData.model_validate(data.model_dump())
         if len(data.model_dump_json().encode("utf-8")) > 160000:

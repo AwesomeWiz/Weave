@@ -36,7 +36,7 @@ export default function ExpertResults({ result, onNode, onSource }: {
     </li>;
   }
   return <div className="impact-results">
-    <h2>Expert Finder</h2>
+    <h2>Who can help</h2>
     <p className="impact-caution">Scores reflect the graph tool's fixed evidence weights. Returned rankings are bounded and are not exhaustive.</p>
     <section className="impact-section" aria-label="Resolved topics"><h3>Resolved topics</h3>
       {result.data.topics.map(t => <p key={t.id}>{entity(t.id)} <code>{t.id}</code></p>)}

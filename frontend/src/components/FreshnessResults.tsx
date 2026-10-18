@@ -30,7 +30,7 @@ export default function FreshnessResults({ result, onNode, onSource }: {
     return ids.map(id => { const source = sources.get(id); return source ? <button className="citation" key={id} onClick={() => onSource(source)}>{id}</button> : null; });
   }
   return <div className="impact-results">
-    <h2>Knowledge Freshness</h2>
+    <h2>Documents to review</h2>
     <p className="impact-caution">Review recommendations are based on bounded graph evidence. They do not establish that a document is wrong or that other documents are current.</p>
     {result.data.entity ? <p>Resolved target: {entity(result.data.entity.id)} <code>{result.data.entity.id}</code></p>
       : <p>No unambiguous service was resolved. Specify an exact service name or canonical ID.</p>}

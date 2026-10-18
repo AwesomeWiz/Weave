@@ -1,7 +1,11 @@
-import type { ChangeEvidenceReference, ChangeResponse, ExpertEvidence, FreshnessPath, GraphNode, ImpactFinding, Source } from '../types';
+import type { ChangeEvidenceReference, ChangeResponse, ExpertEvidence, FreshnessPath, GraphNode, ImpactFinding, Source, TraceSequence } from '../types';
 import { CHANGE_TOOL_LABELS, historicalPathReference } from '../change';
+import { traceSequences } from '../traceValidation';
+import { preferredTrace } from '../tracePresentation';
+import { Play } from 'lucide-react';
 import EntityIcon from './EntityIcon';
 import { SourceRow } from './Inspector';
+import AnswerContent from './AnswerContent';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -12,15 +16,23 @@ function ProofDetails({ summary, children }: { summary: ReactNode; children: Rea
   </details>;
 }
 
-export default function ChangeBrief({ result, onNode, onSource, onPath, onEvidence }: {
+export default function ChangeBrief({ result, onNode, onSource, onPath, onEvidence, onTrace, onWatch }: {
   result: ChangeResponse; onNode: (node: GraphNode) => void; onSource: (source: Source) => void;
   onPath: (finding: ImpactFinding) => void; onEvidence: (ref: ChangeEvidenceReference) => void;
+  onTrace?: (sequence: TraceSequence) => void;
+  onWatch?: (sequence: TraceSequence) => void;
 }) {
   const { data } = result;
+  const playback = traceSequences(result);
+  const preferred = preferredTrace(playback);
+  function traceButton(tool: TraceSequence['tool'], pathId: string) {
+    const sequence = playback.find(s => s.tool === tool && s.path_id === pathId);
+    return sequence && onTrace && <button className="button small" onClick={() => onTrace(sequence)}>Trace {tool === 'decision_trace' ? 'historical' : 'impact'} path {pathId}</button>;
+  }
   const nodes = new Map(result.graph.nodes.map(n => [n.id, n]));
   const sources = new Map(result.sources.map(s => [s.id, s]));
-  const sectionNames = ['Proposed Change', 'Historical Context', 'Direct and Downstream Impact', 'Relevant Reviewers',
-    'Known Facts and Potential Risks', 'Recommended Validation', 'Current Knowledge Freshness', 'Documents to Review if Change Proceeds', 'Supporting Evidence'];
+  const sectionNames = ['Proposed Change', 'Why the system works this way', 'What could be affected', 'Who should review this',
+    'Known facts and potential risks', 'Recommended checks', 'Documents to review now', 'Documents to review if the change proceeds', 'Supporting evidence'];
   function entity(id: string) {
     const n = nodes.get(id);
     return n ? <button className="impact-entity" onClick={() => onNode(n)}><EntityIcon type={n.type} size={16} />{n.label}</button> : <code>{id}</code>;
@@ -30,10 +42,7 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
       ? <button className="citation" key={id} onClick={() => onSource(source)}>{id}</button> : null; })}</span>;
   }
   function narrative(text: string) {
-    return text.split('\n\n').map((paragraph, i) => <p key={i}>{paragraph.split(/(\[[^\]]+\])/g).map((part, index) => {
-      const source = sources.get(part.slice(1, -1));
-      return source ? <button className="citation" key={index} onClick={() => onSource(source)}>{source.id}</button> : part;
-    })}</p>);
+    return <AnswerContent text={text} sources={result.sources} onSource={onSource} />;
   }
   function directed(path: FreshnessPath[]) {
     return <div className="impact-path">{path.map((p, i) => <p key={i}>{entity(p.source)}<span> —{p.type}→ </span>{entity(p.target)}</p>)}</div>;
@@ -57,18 +66,24 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
       <code>{f.service_id}</code>{directed(f.path_edges)}
       <p className="small muted">Returned owners / teams: {f.owners.length ? f.owners.map(o => <span key={o.id}>{entity(o.id)} </span>) : 'Not returned'}</p>
       <button className="button small" onClick={() => onPath(f)}>Highlight path to {nodes.get(f.service_id)?.label ?? f.service_id}</button>
+      {traceButton('impact_analysis', f.service_id)}
       {f.source_ids.length ? <p className="small muted">Related historical sources; they do not establish failure propagation. {citations(f.source_ids)}</p>
         : <p className="small muted">Structural graph evidence; no textual propagation evidence returned.</p>}
     </div>) : <p className="muted">No independently validated {title.toLowerCase()} findings returned.</p>}</div>;
   }
   return <div className="change-brief">
-    <header className="change-brief-header"><p className="eyebrow">Change Intelligence</p><h2>Change Brief</h2>
-      <p className="muted">A proposal review assembled from retrieved evidence. No change or validation has been performed.</p></header>
-    {result.metadata.generation === 'openrouter' && <section className="change-section" aria-label="Grounded overview">
-      <h3>Grounded overview</h3><p className="small muted">Hosted selection of validated statements. The structured evidence below remains authoritative.</p>
-      <div className="change-narrative">{narrative(result.answer)}</div>
-    </section>}
-    <nav className="change-contents" aria-label="Change Brief sections">{sectionNames.map((name, i) => <a href={`#change-section-${i}`} key={name}>{name}</a>)}</nav>
+    <header className="change-brief-header"><p className="eyebrow">Understand changes</p><h2>Change Assessment</h2>
+      <p className="muted">A proposal review assembled from retrieved evidence. No change or validation has been performed.</p>
+      <div className="watch-trace-entry"><button className="button primary watch-trace" disabled={!preferred || !onWatch}
+        onClick={() => { if (preferred) onWatch?.(preferred); }}><Play size={18} />Watch Evidence Trace</button>
+        <p className="small muted">{preferred ? 'Follow the verified connections behind this change.' : 'No playable evidence path was returned. The original brief remains available.'}</p></div></header>
+    <section className="change-section" aria-label="Overview"><h3>Overview</h3>
+      <p className={`support-badge ${result.support_status}`}>{result.support_status.replaceAll('_', ' ')}</p>
+      {narrative(result.metadata.generation === 'openrouter' ? result.answer : result.answer.split(/\r?\n\s*\r?\n/)[0])}
+      <p className="small muted">The structured evidence below remains authoritative. Potential impact is not guaranteed failure.</p>
+      {result.metadata.generation !== 'openrouter' && <ProofDetails summary="Read the original full answer">{narrative(result.answer)}</ProofDetails>}
+    </section>
+    <details className="change-section-index"><summary>Jump to a section</summary><nav className="change-contents" aria-label="Change Assessment sections">{sectionNames.map((name, i) => <a href={`#change-section-${i}`} key={name}>{name}</a>)}</nav></details>
 
     <section id="change-section-0" className="change-section" aria-label={sectionNames[0]}><h3>01 <span>Proposed Change</span></h3>
       <p className="change-proposal">{data.proposed_change.requested_change}</p>
@@ -76,10 +91,10 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
       <div className="change-targets">{[data.proposed_change.service, data.proposed_change.technology].map(n => n && <span key={n.id}>{entity(n.id)}<code>{n.id}</code></span>)}</div>
       {data.proposed_change.limitation && <p className="change-caution" role="status">{data.proposed_change.limitation}</p>}
     </section>
-    <section id="change-section-1" className="change-section" aria-label={sectionNames[1]}><h3>02 <span>Historical Context</span></h3>
+    <section id="change-section-1" className="change-section" aria-label={sectionNames[1]}><h3>02 <span>{sectionNames[1]}</span></h3>
       <p className={`support-badge ${data.historical_context.support_status}`}>{data.historical_context.support_status.replaceAll('_', ' ')}</p>
       <div className="change-narrative">{narrative(data.historical_context.summary)}</div>
-      <div className="change-history-paths"><h4>Ordered historical evidence paths</h4>
+      <details className="change-history-paths"><summary>Ordered historical evidence paths</summary>
         <p className="small muted">Each path preserves returned relationship direction and step order. Separate paths do not form a single timeline or an impact traversal.</p>
         {data.historical_context.relationship_paths?.length ? data.historical_context.relationship_paths.map(path => {
           const reference = historicalPathReference(result, path);
@@ -88,18 +103,19 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
             <ol>{path.steps.map((step, i) => <li key={i}>{directed([step])}
               <p className="small muted"><code>{step.source}</code> → <code>{step.target}</code></p></li>)}</ol>
             {reference && <button className="button small" onClick={() => onEvidence(reference)}>Highlight historical path {path.id}</button>}
+            {traceButton('decision_trace', path.id)}
             <p className="small muted">Stored graph relationships; this path assigns no additional textual citations.</p>
           </article>;
         }) : <p className="small muted">No ordered historical paths were returned. No sequence has been inferred from the graph.</p>}
-      </div>
+      </details>
       {data.historical_context.evidence && evidence([data.historical_context.evidence])}
     </section>
-    <section id="change-section-2" className="change-section" aria-label={sectionNames[2]}><h3>03 <span>Direct and Downstream Impact</span></h3>
+    <section id="change-section-2" className="change-section" aria-label={sectionNames[2]}><h3>03 <span>{sectionNames[2]}</span></h3>
       <p className="change-caution">Potential impact from stored relationships, within {data.impact.max_depth} hops. This is not a prediction of guaranteed failure.</p>
       <p className="small muted">Impact support: {data.impact.support_status.replaceAll('_', ' ')}. Arrows below retain the stored direction.</p>
       {impacts('Immediate impact', data.impact.direct_impact)}{impacts('Potential downstream impact', data.impact.indirect_impact)}
     </section>
-    <section id="change-section-3" className="change-section" aria-label={sectionNames[3]}><h3>04 <span>Relevant Reviewers</span></h3>
+    <section id="change-section-3" className="change-section" aria-label={sectionNames[3]}><h3>04 <span>{sectionNames[3]}</span></h3>
       <p className="small muted">Existing evidence rankings, without rescoring. Historical contributions do not establish current personal ownership.</p>
       {!data.reviewers.length && <p>No independently validated reviewer rankings returned. This does not establish that no reviewers exist.</p>}
       {data.reviewers.map((person, i) => <div className="change-reviewer" key={person.person.id}>
@@ -113,19 +129,19 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
           {!person.historical_contributions.length && <p>No historical contributions returned.</p>}</ProofDetails>
       </div>)}
     </section>
-    <section id="change-section-4" className="change-section" aria-label={sectionNames[4]}><h3>05 <span>Known Facts and Potential Risks</span></h3>
+    <section id="change-section-4" className="change-section" aria-label={sectionNames[4]}><h3>05 <span>{sectionNames[4]}</span></h3>
       {!data.risks.length && <p>No evidence-backed facts or risk recommendations established for this proposal.</p>}
       {data.risks.map((risk, i) => <div className={`change-risk ${risk.classification.toLowerCase()}`} key={i}>
         <span className="change-classification">{risk.classification.replaceAll('_', ' ')}</span><p>{risk.description}</p>
         <p className="small muted">{risk.uncertainty}</p>{citations([...new Set(risk.evidence.flatMap(r => r.source_ids))])}{evidence(risk.evidence)}
       </div>)}
     </section>
-    <section id="change-section-5" className="change-section" aria-label={sectionNames[5]}><h3>06 <span>Recommended Validation</span></h3>
+    <section id="change-section-5" className="change-section" aria-label={sectionNames[5]}><h3>06 <span>{sectionNames[5]}</span></h3>
       <p className="change-caution">Recommended actions only. These checks have not been performed.</p>
       <ol className="change-validation">{data.validation_steps.map((step, i) => <li key={i}><p>{step.description}</p><span className="small muted">Recommendation · Not performed</span>{evidence(step.evidence)}</li>)}</ol>
       {!data.validation_steps.length && <p>No evidence-constrained validation steps available.</p>}
     </section>
-    <section id="change-section-6" className="change-section change-current" aria-label={sectionNames[6]}><h3>07 <span>Current Knowledge Freshness</span></h3>
+    <section id="change-section-6" className="change-section change-current" aria-label={sectionNames[6]}><h3>07 <span>{sectionNames[6]}</span></h3>
       <p>Existing review recommendations based on actual document and later-change timestamps. They do not establish that a document is wrong.</p>
       {!data.current_freshness_findings.length && <p className="muted">No current review findings established. This does not prove the documentation is current.</p>}
       {data.current_freshness_findings.map(f => <div className="change-document" key={f.document_id}>
@@ -138,14 +154,14 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
         </ProofDetails>
       </div>)}
     </section>
-    <section id="change-section-7" className="change-section change-conditional" aria-label={sectionNames[7]}><h3>08 <span>Documents to Review if Change Proceeds</span></h3>
+    <section id="change-section-7" className="change-section change-conditional" aria-label={sectionNames[7]}><h3>08 <span>{sectionNames[7]}</span></h3>
       <p className="change-condition">If this change is approved and implemented</p><p>Conditional future review, separate from current freshness. A recommendation here does not mean a document is currently stale.</p>
       {!data.documents_to_review_if_change_proceeds.length && <p className="muted">No documents with validated conditional review associations returned.</p>}
       {data.documents_to_review_if_change_proceeds.map(d => <div className="change-document" key={d.document.id}>
         <h4>{entity(d.document.id)}</h4><code>{d.document.id}</code><p>{d.reason}</p>{evidence(d.evidence, 'Service-document association')}
       </div>)}
     </section>
-    <section id="change-section-8" className="change-section" aria-label={sectionNames[8]}><h3>09 <span>Supporting Evidence</span></h3>
+    <section id="change-section-8" className="change-section" aria-label={sectionNames[8]}><h3>09 <span>{sectionNames[8]}</span></h3>
       <p className="small muted">Each capability retains its own evidence and support status.</p>
       <dl className="change-support">{Object.entries(data.tool_support).map(([tool, state]) => <div key={tool}>
         <dt>{CHANGE_TOOL_LABELS[tool as keyof typeof CHANGE_TOOL_LABELS]}</dt><dd>{state.support_status.replaceAll('_', ' ')} · {state.state}</dd>

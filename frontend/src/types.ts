@@ -80,6 +80,15 @@ export interface ChangeHistoricalContext {
 }
 export interface TracePathStep { source: string; type: string; target: string }
 export interface TraceRelationshipPath { id: string; steps: TracePathStep[] }
+export interface TraceStep extends TracePathStep {
+  number: number; sequence_id: string; edge_id: string; tool: 'decision_trace' | 'impact_analysis';
+  traversal_from: string; traversal_to: string; evidence: ChangeEvidenceReference;
+  explanation: string; citation_ids: string[];
+}
+export interface TraceSequence {
+  id: string; path_id: string; tool: 'decision_trace' | 'impact_analysis'; support_status: SupportStatus; steps: TraceStep[];
+}
+export interface TracePlaybackData { version: 1; sequences: TraceSequence[] }
 export type ChangeImpact = ImpactResponse['data'] & {
   support_status: SupportStatus; max_depth: number;
 }
@@ -101,5 +110,6 @@ export interface ChangeBriefData {
   reviewers: ExpertRanking[]; risks: ChangeRisk[]; validation_steps: ChangeValidationStep[];
   current_freshness_findings: FreshnessFinding[]; documents_to_review_if_change_proceeds: ChangeDocumentReview[];
   tool_support: Partial<Record<ChangeTool, ChangeToolSupport>>; limitations: string[];
+  trace_playback?: TracePlaybackData | null;
 }
 export interface ChangeResponse extends QueryResponse { data: ChangeBriefData }

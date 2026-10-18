@@ -376,6 +376,38 @@ class ChangeToolSupport(BaseModel):
     evidence: ChangeEvidenceReference
 
 
+class TraceStep(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    number: int = Field(ge=1, le=10)
+    sequence_id: str = Field(min_length=1, max_length=160)
+    source: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+    edge_id: str = Field(min_length=1)
+    tool: Literal["decision_trace", "impact_analysis"]
+    traversal_from: str = Field(min_length=1)
+    traversal_to: str = Field(min_length=1)
+    evidence: ChangeEvidenceReference
+    explanation: str = Field(min_length=1, max_length=2000)
+    # Structural playback establishes relationships, not textual rationale.
+    citation_ids: list[str] = Field(default_factory=list, max_length=0)
+
+
+class TraceSequence(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(min_length=1, max_length=160)
+    path_id: str = Field(min_length=1, max_length=128)
+    tool: Literal["decision_trace", "impact_analysis"]
+    support_status: SupportStatus
+    steps: list[TraceStep] = Field(min_length=1, max_length=10)
+
+
+class TracePlaybackData(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    version: Literal[1] = 1
+    sequences: list[TraceSequence] = Field(default_factory=list, max_length=140)
+
+
 class ChangeBriefData(BaseModel):
     proposed_change: ChangeTarget
     historical_context: ChangeHistoricalContext = Field(default_factory=ChangeHistoricalContext)
@@ -387,6 +419,7 @@ class ChangeBriefData(BaseModel):
     documents_to_review_if_change_proceeds: list[ChangeDocumentReview] = Field(default_factory=list, max_length=50)
     tool_support: dict[str, ChangeToolSupport] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
+    trace_playback: TracePlaybackData | None = None
 
 
 class ChangeResponse(QueryResponse):

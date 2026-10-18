@@ -1,4 +1,5 @@
 import type { ChangeBriefData, ChangeEvidenceReference, ChangeInput, ChangeTool, QueryResponse } from './types';
+import { validTracePlayback } from './traceValidation';
 
 const tools: ChangeTool[] = ['decision_trace', 'impact_analysis', 'find_expert', 'find_stale_knowledge'];
 const publicNames = { decision_trace: 'trace_decision', impact_analysis: 'impact_analysis', find_expert: 'find_expert', find_stale_knowledge: 'find_stale_knowledge' };
@@ -211,5 +212,5 @@ export function validChangeData(value: unknown, response: QueryResponse, request
         });
     }));
   })) return false;
-  return quoted(response.answer, [...sources]);
+  return quoted(response.answer, [...sources]) && validTracePlayback(data.trace_playback, data as unknown as ChangeBriefData, response);
 }

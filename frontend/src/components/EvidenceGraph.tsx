@@ -1,58 +1,91 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { Background, BaseEdge, Controls, EdgeLabelRenderer, Handle, MarkerType, MiniMap, Position, ReactFlow, useNodesInitialized, useReactFlow, useStore } from '@xyflow/react';
-import type { Node, NodeProps, Edge, EdgeProps } from '@xyflow/react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, useNodesInitialized, useReactFlow, useStore } from '@xyflow/react';
+import type { Node, NodeProps, Edge } from '@xyflow/react';
 import dagre from '@dagrejs/dagre';
 import EntityIcon from './EntityIcon';
-import type { EvidenceGraph as Graph, GraphNode } from '../types';
+import type { EvidenceGraph as Graph, GraphNode, TraceSequence } from '../types';
+import type { TraceClock } from '../traceClock';
+import { traceEntityName, traceRelationshipLabel } from '../tracePresentation';
+import { useTraceClockState } from '../useTracePlayback';
+import { TraceEdge, TraceDetourEdge } from './TraceEdge';
 
-type EntityData = { entity: GraphNode; inspect: (node: GraphNode) => void; [key: string]: unknown };
+type EntityData = { entity: GraphNode; inspect: (node: GraphNode) => void; cinematic?: boolean; clock?: TraceClock; arriving?: boolean; [key: string]: unknown };
 type EntityNode = Node<EntityData, 'entity'>;
 
 function Entity({ data, selected }: NodeProps<EntityNode>) {
   const entity = data.entity;
-  return <div className={`entity-node type-${entity.type.toLowerCase()} ${selected ? 'selected' : ''}`}>
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!data.clock || !data.arriving) return;
+    return data.clock.subscribeFrame(progress => { if (ref.current) ref.current.dataset.arrived = progress >= 0.85 ? 'true' : 'false'; });
+  }, [data.clock, data.arriving]);
+  const label = traceEntityName(entity, entity.id);
+  return <div ref={ref} className={`entity-node type-${entity.type.toLowerCase()} ${selected ? 'selected' : ''}`}>
     {[Position.Left, Position.Right, Position.Top, Position.Bottom].map(position => <Handle key={`target-${position}`} id={`target-${position}`} type="target" position={position} />)}
     <span className="entity-icon"><EntityIcon type={entity.type} size={22} /></span>
-    <button className="node-text nodrag" onClick={() => data.inspect(entity)} aria-label={`Inspect ${entity.label}`}><strong title={entity.label}>{entity.label}</strong><small>{entity.type}</small></button>
+    <button className="node-text nodrag" onClick={() => data.inspect(entity)} aria-label={`Inspect ${label}`}><strong title={label}>{label}</strong><small>{entity.type}</small></button>
     {[Position.Left, Position.Right, Position.Top, Position.Bottom].map(position => <Handle key={`source-${position}`} id={`source-${position}`} type="source" position={position} />)}
   </div>;
 }
 
 const nodeTypes = { entity: Entity };
 
-function DetourEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, label, style }: EdgeProps) {
-  // Route long same-column edges around intermediate nodes, keeping the label in the gutter.
-  const path = `M ${sourceX} ${sourceY} C ${sourceX + 125} ${sourceY}, ${targetX + 125} ${targetY}, ${targetX} ${targetY}`;
-  const t = 0.36;
-  const labelX = sourceX + 3 * 125 * t * (1 - t);
-  const labelY = sourceY + (targetY - sourceY) * (3 * t * t - 2 * t * t * t);
-  return <><BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
-    <EdgeLabelRenderer><span className="graph-edge-label" style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}>{label}</span></EdgeLabelRenderer></>;
+const edgeTypes = { default: TraceEdge, detour: TraceDetourEdge };
+
+function FitGraph({ manual }: { manual: { current: boolean } }) {
+  const { fitView } = useReactFlow();
+  return <button className="button small fit-graph" onClick={() => { manual.current = true; void fitView({ padding: 0.2 }); }}>Fit graph</button>;
 }
 
-const edgeTypes = { detour: DetourEdge };
-
-function InitialFit({ visible, fitNodeIds, graphKey }: { visible: boolean; fitNodeIds: string[]; graphKey: string }) {
+function InitialFit({ visible, fitNodeIds, graphKey, clock, manual }: { visible: boolean; fitNodeIds: string[]; graphKey: string; clock?: TraceClock | null; manual: { current: boolean } }) {
   const initialized = useNodesInitialized({ includeHiddenNodes: true });
-  const { fitView } = useReactFlow();
+  const { fitView, getViewport, setViewport } = useReactFlow();
   const width = useStore(state => state.width);
   const height = useStore(state => state.height);
   const fitted = useRef('');
-  const key = graphKey + '/' + fitNodeIds.join('|') + (fitNodeIds.length ? `/${width}x${height}` : '');
+  const state = useTraceClockState(clock);
+  const reset = useRef({ clock, key: state.cameraReset });
+  const key = graphKey + '/' + fitNodeIds.join('|') + (fitNodeIds.length ? `/${width}x${height}` : '') + '/' + state.cameraReset;
+  const wasPlaying = useRef(state.playing);
+  const pausedFrame = useRef<string | null>(null);
   useEffect(() => {
+    if (reset.current.clock !== clock) { wasPlaying.current = state.playing; pausedFrame.current = null; }
+    if (clock && wasPlaying.current && !state.playing) {
+      pausedFrame.current = key;
+      void setViewport(getViewport(), { duration: 0 });
+    } else if (clock && !wasPlaying.current && state.playing && pausedFrame.current === key) {
+      pausedFrame.current = null; fitted.current = '';
+    }
+    wasPlaying.current = state.playing;
+  }, [clock, key, state.playing, getViewport, setViewport]);
+  useEffect(() => {
+    if (reset.current.clock !== clock || reset.current.key !== state.cameraReset) {
+      manual.current = false; reset.current = { clock, key: state.cameraReset }; fitted.current = ''; pausedFrame.current = null;
+    }
+    if (clock && !state.playing && pausedFrame.current === key) return;
+    if (clock && manual.current) return;
     if (!visible || !initialized || !width || !height || fitted.current === key) return;
     const frame = requestAnimationFrame(() => {
+      if (clock && manual.current) return;
       void fitView({ ...(fitNodeIds.length ? { nodes: fitNodeIds.map(id => ({ id })) } : {}),
-        padding: { top: '40px', right: '25px', bottom: '55px', left: '25px' } }).then(success => { if (success) fitted.current = key; });
+        ...(clock ? { duration: state.reduced ? 0 : 450, minZoom: 0.55, maxZoom: 1.1 } : {}),
+        padding: clock ? { top: '55px', right: '35px', bottom: '70px', left: '35px' }
+          : { top: '40px', right: '25px', bottom: '55px', left: '25px' } }).then(success => { if (success) fitted.current = key; });
     });
     return () => cancelAnimationFrame(frame);
-  }, [visible, initialized, width, height, fitView, fitNodeIds, key]);
+  }, [visible, initialized, width, height, fitView, fitNodeIds, key, clock, state.cameraReset, state.reduced, state.playing, manual]);
   return null;
 }
 
-export default function EvidenceGraph({ graph, onSelect, selectedId, highlightedEdgeIds = [], emphasizedNodeIds = [], fitNodeIds = [], expanded = false, visible = true }: {
-  graph: Graph; onSelect: (node: GraphNode) => void; selectedId?: string; highlightedEdgeIds?: string[]; emphasizedNodeIds?: string[]; fitNodeIds?: string[]; expanded?: boolean; visible?: boolean;
+export default function EvidenceGraph({ graph, onSelect, selectedId, highlightedEdgeIds = [], emphasizedNodeIds = [], traceNodeIds = [], fitNodeIds = [], expanded = false, visible = true, trace, clock }: {
+  graph: Graph; onSelect: (node: GraphNode) => void; selectedId?: string; highlightedEdgeIds?: string[]; emphasizedNodeIds?: string[]; traceNodeIds?: string[]; fitNodeIds?: string[]; expanded?: boolean; visible?: boolean;
+  trace?: { sequence: TraceSequence; index: number }; clock?: TraceClock | null;
 }) {
+  const select = useRef(onSelect);
+  useEffect(() => { select.current = onSelect; }, [onSelect]);
+  const inspect = useCallback((node: GraphNode) => { clock?.pause(); select.current(node); }, [clock]);
+  const manual = useRef(false);
+  const motion = useTraceClockState(clock);
   const { nodes, edges } = useMemo(() => {
     const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
     layout.setGraph({ rankdir: 'LR', ranksep: 120, nodesep: 65, edgesep: 30, marginx: 30, marginy: 30 });
@@ -88,7 +121,7 @@ export default function EvidenceGraph({ graph, onSelect, selectedId, highlighted
     }
     const nodes: EntityNode[] = graph.nodes.map(entity => {
       return { id: entity.id, type: 'entity', position: positions.get(entity.id)!, width: 180, height: 72,
-        data: { entity, inspect: onSelect }, ariaLabel: `${entity.label}, ${entity.type}`, draggable: false };
+        data: { entity, inspect: (n: GraphNode) => select.current(n) }, ariaLabel: `${entity.label}, ${entity.type}`, draggable: false };
     });
     const edges: Edge[] = graph.edges.map(e => {
       const from = positions.get(e.source)!;
@@ -114,37 +147,46 @@ export default function EvidenceGraph({ graph, onSelect, selectedId, highlighted
       ariaLabel: `${e.source} ${e.type} ${e.target}`,
     }; });
     return { nodes, edges };
-  }, [graph, onSelect]);
+  }, [graph]);
 
   // Selection changes styling only; layout and the React Flow viewport stay intact.
   const highlighted = useMemo(() => {
+    const current = trace?.sequence.steps[trace.index];
+    const completed = new Set(trace?.sequence.steps.slice(0, trace.index).map(s => s.edge_id));
     const neighbors = new Set([selectedId]);
     graph.edges.forEach(e => { if (e.source === selectedId) neighbors.add(e.target); if (e.target === selectedId) neighbors.add(e.source); });
     return {
-      nodes: nodes.map(node => ({ ...node, selected: node.id === selectedId,
-        className: selectedId && neighbors.has(node.id) ? 'connected-node' : '',
-        style: { opacity: selectedId ? (!neighbors.has(node.id) ? 0.75 : 1) : emphasizedNodeIds.length && !emphasizedNodeIds.includes(node.id) ? 0.65 : 1 } })),
+      nodes: nodes.map(node => ({ ...node, selected: !trace && node.id === selectedId,
+        data: { ...node.data, inspect, cinematic: !!trace, clock: clock ?? undefined, arriving: current?.traversal_to === node.id },
+        className: traceNodeIds.length ? traceNodeIds.includes(node.id) ? `trace-node ${current?.traversal_from === node.id ? 'trace-origin' : 'trace-destination'}` : '' : selectedId && neighbors.has(node.id) ? 'connected-node' : '',
+        style: { opacity: traceNodeIds.length ? traceNodeIds.includes(node.id) ? 1 : 0.55 : selectedId ? (!neighbors.has(node.id) ? 0.75 : 1) : emphasizedNodeIds.length && !emphasizedNodeIds.includes(node.id) ? 0.65 : 1 } })),
       edges: edges.map(edge => {
         const connected = highlightedEdgeIds.length ? highlightedEdgeIds.includes(edge.id) : edge.source === selectedId || edge.target === selectedId;
-        return { ...edge, style: { ...edge.style, stroke: connected ? '#315d48' : '#7b9181', strokeWidth: connected ? 2.4 : 1.3, opacity: selectedId && !connected ? 0.55 : 1 },
+        return { ...edge, label: traceRelationshipLabel(String(edge.label)),
+          data: { clock: clock ?? undefined, active: current?.edge_id === edge.id, reverse: current?.edge_id === edge.id && current.traversal_from === edge.target },
+          className: trace ? connected ? 'trace-edge-active' : completed.has(edge.id) ? 'trace-edge-completed' : 'trace-edge-future' : '',
+          style: { ...edge.style, stroke: connected ? '#315d48' : '#7b9181', strokeWidth: connected ? 2.4 : completed.has(edge.id) ? 2 : 1.3, opacity: trace ? connected ? 1 : completed.has(edge.id) ? 0.65 : 0.3 : selectedId && !connected ? 0.55 : 1 },
           markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: connected ? '#315d48' : '#7b9181' } };
       }),
     };
-  }, [nodes, edges, graph.edges, selectedId, highlightedEdgeIds, emphasizedNodeIds]);
+  }, [nodes, edges, graph.edges, selectedId, highlightedEdgeIds, emphasizedNodeIds, traceNodeIds, trace, clock, inspect]);
 
   if (!graph.nodes.length) return <div className="graph-empty"><GitEmpty />No connected graph evidence was returned.</div>;
-  return <div className={`graph-canvas ${expanded ? 'expanded' : ''}`} aria-label="Evidence graph">
+  return <div className={`graph-canvas ${expanded ? 'expanded' : ''} ${trace ? 'cinematic-graph' : ''}`} aria-label="Evidence graph" data-playing={motion.playing}>
+    {trace && <button className="trace-recenter button small" onClick={() => clock?.recenter()}>Recenter trace</button>}
     <div className="graph-legend" aria-label="Entity types">
       {Array.from(new Set(graph.nodes.map(n => n.type))).map(type =>
         <span className={`type-${type.toLowerCase()}`} key={type}><i />{type}</span>)}
     </div>
     <ReactFlow nodes={highlighted.nodes} edges={highlighted.edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
       minZoom={0.25} maxZoom={1.6} nodesConnectable={false} edgesFocusable={false}
-      onNodeClick={(_event, node) => onSelect(node.data.entity)}>
-      <InitialFit visible={visible} fitNodeIds={fitNodeIds} graphKey={graph.nodes.map(n => n.id).join('|')} />
+      onMoveStart={event => { if (event) manual.current = true; }}
+      onNodeClick={(_event, node) => inspect(node.data.entity)}>
+      <InitialFit visible={visible} fitNodeIds={fitNodeIds} graphKey={graph.nodes.map(n => n.id).join('|')} clock={clock} manual={manual} />
       <Background color="#dce4da" gap={22} size={1} />
-      <Controls showInteractive={false} />
-      {expanded && <MiniMap pannable zoomable nodeColor="#cedbcd" />}
+      {!trace && <FitGraph manual={manual} />}
+      <Controls showInteractive={false} onZoomIn={() => { manual.current = true; }} onZoomOut={() => { manual.current = true; }} onFitView={() => { manual.current = true; }} />
+      {expanded && !trace && <MiniMap pannable zoomable nodeColor="#cedbcd" />}
     </ReactFlow>
     <span className="graph-hint">Scroll to zoom · drag to pan · select a node to inspect</span>
   </div>;

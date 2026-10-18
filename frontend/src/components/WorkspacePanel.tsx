@@ -10,7 +10,7 @@ export default function WorkspacePanel({ children, modal, hidden, label, classNa
     if (!modal || hidden) return;
     const previous = document.activeElement as HTMLElement | null;
     const panel = ref.current!;
-    const controls = () => [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input, textarea, [tabindex="0"]')].filter(el => el.getClientRects().length > 0);
+    const controls = () => [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary, [tabindex="0"]')].filter(el => el.getClientRects().length > 0);
     (controls()[0] ?? panel).focus({ preventScroll: true });
     function trap(event: KeyboardEvent) {
       if (event.key !== 'Tab') return;
