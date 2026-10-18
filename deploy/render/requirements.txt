@@ -1,0 +1,7 @@
+# Production roots from backend/requirements.txt. Install with its existing lock
+# as constraints; pip supplies all required transitive dependencies, not tests.
+fastapi
+uvicorn
+pydantic-settings
+httpx
+falkordb

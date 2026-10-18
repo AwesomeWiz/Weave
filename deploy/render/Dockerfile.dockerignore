@@ -1,0 +1,26 @@
+# Dockerfile-specific allowlist. Do not send .env, screenshots or local secrets.
+**
+!backend/
+!backend/requirements.lock.txt
+!backend/app/
+!backend/app/**
+!app/
+!app/graph/
+!app/graph/**
+!weave_graph/
+!weave_graph/**
+!weave_data/
+!weave_data/**
+!data/
+!data/novapay/
+!data/novapay/**
+!deploy/
+!deploy/render/
+!deploy/render/**
+**/__pycache__
+**/*.pyc
+**/test_*.py
+**/.env
+**/.env.*
+**/*.pem
+**/*.key

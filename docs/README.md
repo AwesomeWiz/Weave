@@ -6,6 +6,7 @@ Start with the [project README](../README.md) for the product, actual graph mode
 
 - [Detailed run guide](RUNNING.md): PowerShell and POSIX commands, graph/source configuration, authenticated ingestion, offline checks and opt-in live gates.
 - [Deployment runbook](DEPLOYMENT_RUNBOOK.md): Railway, Vercel and FalkorDB Cloud settings, approved hosted seeding, acceptance and rollback; no local Docker required.
+- [Render Free proof of concept](RENDER_FREE_POC.md): separate experimental single-container API + genuine FalkorDB option; runtime/memory feasibility requires a live trial.
 - [Screenshot assets and provenance](assets/README.md): repository-visible sample UI captures; no live database/provider acceptance is implied.
 - [Submission checklist](10_SUBMISSION_CHECKLIST.md): requirements to verify before submitting. Checkboxes are a checklist, not a claim that submission or deployment is complete.
 

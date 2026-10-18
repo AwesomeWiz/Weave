@@ -1,5 +1,7 @@
 # Railway + Vercel + FalkorDB Cloud deployment
 
+Alternative experiment: [Render Free single-container proof of concept](RENDER_FREE_POC.md). Its local disposable graph policy is separate from this hosted Cloud procedure; no successful Render deployment or memory feasibility is implied.
+
 Phase 5 starts from merged Phase 4 `main`, commit `33fd3a620add90abff52450ba6d6128997f71309`. Preparation changes are uncommitted on `chore/phase5-deployment-readiness`. No service was provisioned, deployed or modified. Both original stashes and the five untracked source screenshots were preserved.
 
 **Verdict: ready with manual prerequisites.** Public launch is blocked until an owned FalkorDB Cloud instance is provisioned, its connection settings are supplied, initial seeding is approved, and Railway/Vercel accounts and domains are configured. No combined live Cloud acceptance is claimed. This procedure requires no local Docker.
