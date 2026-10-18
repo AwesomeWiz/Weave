@@ -39,6 +39,10 @@ def database(monkeypatch):
                                          properties={k: v for k, v in n.items() if k != "entity_type"})
                      for id, n in store.all_nodes().items()}
             edges = list(store.all_relationships().values())
+            def relationship(edge):
+                return SimpleNamespace(
+                    properties=edge["properties"], relation=edge["rel_type"]
+                )
             if "RETURN d, s, t" in query:
                 rows = [(nodes["decision:D-007"], nodes[params["service_id"]], nodes[params["technology_id"]])]
             elif "RETURN type(r), e" in query:
@@ -46,13 +50,34 @@ def database(monkeypatch):
                         if e["source_id"] == params["decision_id"] and e["rel_type"] in {
                             "SUPPORTED_BY", "IMPLEMENTED_BY", "DOCUMENTED_IN"}]
             elif "RETURN s, r, t" in query and "service_id" in params:
-                rows = [(nodes[e["source_id"]], SimpleNamespace(properties=e["properties"]), nodes[e["target_id"]])
+                rows = [(nodes[e["source_id"]], relationship(e), nodes[e["target_id"]])
                         for e in edges if e["rel_type"] == "USES" and e["source_id"] == params["service_id"]
                         and e["target_id"] == params["technology_id"]]
             elif "RETURN i, r, issue" in query:
-                rows = [(nodes[e["source_id"]], SimpleNamespace(properties=e["properties"]), nodes[e["target_id"]])
-                        for e in edges if e["rel_type"] == "LED_TO" and e["source_id"] == params["incident_id"]
-                        and e["target_id"] == params["issue_id"]]
+                supported = {e["target_id"] for e in edges
+                             if e["source_id"] == params["decision_id"]
+                             and e["rel_type"] == "SUPPORTED_BY"}
+                rows = [(nodes[e["source_id"]], relationship(e), nodes[e["target_id"]])
+                        for e in edges if e["rel_type"] == "LED_TO" and e["target_id"] in supported]
+            elif "RETURN d, implemented, commit, changes" in query:
+                rows = []
+                for implemented in edges:
+                    if (implemented["source_id"] != params["decision_id"]
+                            or implemented["rel_type"] != "IMPLEMENTED_BY"):
+                        continue
+                    for changes in edges:
+                        if (changes["source_id"] != implemented["target_id"]
+                                or changes["rel_type"] != "CHANGES"
+                                or changes["target_id"] != params["service_id"]):
+                            continue
+                        for uses in edges:
+                            if (uses["source_id"] == params["service_id"]
+                                    and uses["rel_type"] == "USES"
+                                    and uses["target_id"] == params["technology_id"]):
+                                rows.append((nodes[params["decision_id"]], relationship(implemented),
+                                             nodes[implemented["target_id"]], relationship(changes),
+                                             nodes[params["service_id"]], relationship(uses),
+                                             nodes[params["technology_id"]]))
             elif "RETURN n" in query:
                 rows = [(nodes[params["entity_id"]],)] if params["entity_id"] in nodes else []
             elif "RETURN s\n" in query:
