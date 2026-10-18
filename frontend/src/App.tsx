@@ -5,6 +5,8 @@ import { analyzeImpact, ApiError, askQuestion, analyzeChange, checkFreshness, fi
 import type { ChangeEvidenceReference, ExpertInput, FreshnessInput, GraphNode, Health, ImpactFinding, ImpactInput, QueryResponse, Source, TraceSequence } from './types';
 import TracePlayer from './components/TracePlayer';
 import { traceSequences } from './traceValidation';
+import { preferredTrace } from './tracePresentation';
+import type { TraceClock } from './traceClock';
 import ChangeBrief from './components/ChangeBrief';
 import { CHANGE_QUESTION, changeGraphFocus, isChangeResponse, routeChangeQuestion } from './change';
 import FreshnessResults, { FreshnessControls } from './components/FreshnessResults';
@@ -63,6 +65,14 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
   const loading = chat.turns.some(t => t.status === 'pending');
   const error = turn?.error ? new ApiError(turn.error.message, turn.error.code) : null;
   const [page, setPage] = useState<Page>('chat');
+  const [traceClock, setTraceClock] = useState<TraceClock | null>(null);
+  const [watchRequest, setWatchRequest] = useState<string | null>(null);
+  const traceOwner = `${chat.id}/${turn?.id}/${traceSequence?.id}`;
+  const attachMotion = useCallback((clock: TraceClock) => {
+    setTraceClock(clock);
+    return () => setTraceClock(current => current === clock ? null : current);
+  }, []);
+  const watchStarted = useCallback(() => setWatchRequest(null), []);
   const { input, graphScope, highlightedPath, view, tab, graphSearch } = ui;
   const highlightedFinding = ui.highlightedFinding ?? undefined;
   const selectedSource = result?.sources.find(s => s.id === ui.selectedSourceId) ?? null;
@@ -136,10 +146,14 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
     if (!sequences.includes(sequence) || !sequence.steps[step]) return;
     const current = sequence.steps[step];
     workspace.ui(chat.id, { trace: { sequenceId: sequence.id, step }, view: 'graph', tab: 'graph', graphScope: 'all',
-      highlightedPath: [current.edge_id], selectedNodeId: current.traversal_to, selectedSourceId: null, detailsOpen: true },
+      highlightedPath: [current.edge_id], selectedNodeId: current.traversal_to, selectedSourceId: null },
     owned && turn && ui.trace ? { turnId: turn.id, sequenceId: ui.trace.sequenceId, step: ui.trace.step } : undefined);
   }
-  function openTrace(sequence: TraceSequence) { traceChange(sequence, 0); setMobileInspector(false); }
+  function openTrace(sequence: TraceSequence, watch = false) {
+    traceChange(sequence, 0); setMobileInspector(false);
+    workspace.ui(chat.id, { detailsOpen: false });
+    setWatchRequest(watch ? `${chat.id}/${turn?.id}/${sequence.id}` : null);
+  }
   function closeTrace() { workspace.ui(chat.id, { trace: null, highlightedPath: [] }); }
   async function submit(value: string, impactOverride?: ImpactInput, expertOverride?: ExpertInput, freshnessOverride?: FreshnessInput) {
     const text = value.trim();
@@ -244,7 +258,7 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
 
     <main inert={mobileNav || narrow && mobileInspector} className={`main-workspace ${active || page !== 'chat' ? 'has-answer' : 'welcome-workspace'}`}>
       <header className="page-header"><div className="header-heading"><button className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={mobileNav} aria-controls="navigation-panel" onClick={() => setMobileNav(true)}><List size={22} /></button>
-        {(active || page !== 'chat') && <div><h1>{page !== 'chat' ? PAGE_LABELS[page] : view === 'graph' ? 'Knowledge Graph' : 'Chat'}</h1><p>{page !== 'chat' ? 'Explore records already returned in this conversation.' : view === 'graph' ? 'Explore the returned evidence for this question.' : 'Ask questions about your company’s systems, decisions, people and documents.'}</p></div>}</div>
+        {(active || page !== 'chat') && <div><h1>{page !== 'chat' ? PAGE_LABELS[page] : traceStep ? 'Trace Mode' : view === 'graph' ? 'Knowledge Graph' : 'Chat'}</h1><p>{page !== 'chat' ? 'Explore records already returned in this conversation.' : traceStep ? 'Watch how your systems connect, one step at a time.' : view === 'graph' ? 'Explore the returned evidence for this question.' : 'Ask questions about your company’s systems, decisions, people and documents.'}</p></div>}</div>
         <div className="header-actions">{active && <span className="workspace-chip"><Building2 size={16} />NovaPay</span>}
         {(!inspectorOpen || narrow) && <button className="icon-button" title="Expand details panel" aria-label="Expand details panel" aria-controls="details-panel" aria-expanded={inspectorOpen} onClick={toggleInspector}><PanelRightOpen size={20} /></button>}</div>
       </header>
@@ -283,16 +297,13 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
             <div className="answer-meta"><span className={`support-badge ${result.support_status}`}>
               {result.support_status === 'supported' ? <Check size={13} /> : <CircleAlert size={13} />}{result.support_status.replaceAll('_', ' ')}</span>
               <span className="small muted">{result.sources.length} sources{fixture ? ' · Demo data' : ''}</span></div>
-            {isChangeResponse(result) ? <ChangeBrief result={result} onNode={selectNode} onSource={selectSource} onPath={highlightChangeImpact} onEvidence={showChangeEvidence} onTrace={openTrace} /> : isFreshnessResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<FreshnessResults result={result} onNode={selectNode} onSource={selectSource} /></> : isExpertResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ExpertResults result={result} onNode={selectNode} onSource={selectSource} /></> : isImpactResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ImpactResults result={result} onNode={selectNode} onSource={selectSource} onPath={highlightImpact} highlightedId={highlightedFinding} /></> : <AnswerText result={result} onSource={selectSource} />}
+            {isChangeResponse(result) ? <ChangeBrief result={result} onNode={selectNode} onSource={selectSource} onPath={highlightChangeImpact} onEvidence={showChangeEvidence} onTrace={openTrace} onWatch={sequence => openTrace(sequence, true)} /> : isFreshnessResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<FreshnessResults result={result} onNode={selectNode} onSource={selectSource} /></> : isExpertResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ExpertResults result={result} onNode={selectNode} onSource={selectSource} /></> : isImpactResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ImpactResults result={result} onNode={selectNode} onSource={selectSource} onPath={highlightImpact} highlightedId={highlightedFinding} /></> : <AnswerText result={result} onSource={selectSource} />}
           </article></div>}
-          {view === 'graph' && <div className="graph-toolbar"><label className="graph-search"><Search size={17} /><input value={graphSearch} onChange={event => setGraphSearch(event.target.value)} placeholder="Find an entity in this evidence graph…" aria-label="Find graph entity" /></label><button className="button" onClick={() => { setView('chat'); setGraphSearch(''); }}>Back to answer</button></div>}
+          {view === 'graph' && <div className={`graph-toolbar ${traceStep ? 'trace-toolbar' : ''}`}>{!traceStep && <label className="graph-search"><Search size={17} /><input value={graphSearch} onChange={event => setGraphSearch(event.target.value)} placeholder="Find an entity in this evidence graph…" aria-label="Find graph entity" /></label>}<button className="button" onClick={() => { setView('chat'); setGraphSearch(''); }}>Back to answer</button></div>}
           {view === 'graph' && graphSearch && <div className="search-results">{matchedNodes.length ? matchedNodes.map(node => <button className="button" key={node.id} onClick={() => selectNode(node)}><EntityIcon type={node.type} size={16} />{node.label}</button>) : <p>No matching entities in this evidence.</p>}</div>}
           <section className={`evidence-card ${view === 'graph' && traceStep ? 'trace-active' : ''}`}>
-            {view === 'graph' && tab === 'graph' && (ui.trace ? <TracePlayer key={`${chat.id}/${turn?.id}`}
-              sequences={sequences} selection={ui.trace} onChange={(sequence, step) => traceChange(sequence, step, true)} onClose={closeTrace}
-              nodes={result.graph.nodes} sources={result.sources} onNode={selectNode} onSource={selectSource} />
-              : <div className="trace-entry"><button className="button small" disabled={!sequences.length} onClick={() => openTrace(sequences[0])}>Open Trace Mode</button>
-                {!sequences.length && <span className="small muted">No backend-authored playback paths in this response.</span>}</div>)}
+            {view === 'graph' && tab === 'graph' && !ui.trace && <div className="trace-entry"><button className="button primary" disabled={!sequences.length} onClick={() => { const sequence = preferredTrace(sequences); if (sequence) openTrace(sequence, true); }}>Watch Evidence Trace</button>
+                {!sequences.length && <span className="small muted">No playable path was returned. Explore the original graph evidence below.</span>}</div>}
             {changeFocus && graphAvailable && !traceStep && <div className="change-graph-controls" aria-label="Change evidence graph scope">
               <span className="small muted">Focused on the change and its returned evidence. Stored directions are preserved.</span>
               <button className="button small" aria-pressed={graphScope === 'focused'} onClick={() => setGraphScope('focused')}>Change focus</button>
@@ -308,7 +319,7 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
               if (next) { event.preventDefault(); setTab(next); document.getElementById(`tab-${next}`)?.focus({ preventScroll: true }); }
             }}><Icon size={17} />{label}</button>)}</div>
             <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-              <div hidden={tab !== 'graph'}><Suspense fallback={<div className="graph-empty" role="status">Loading evidence graph…</div>}><EvidenceGraph graph={traceStep && traceGraph ? traceGraph : displayedGraph ?? result.graph} onSelect={selectNode} selectedId={inspectedNode?.id} traceNodeIds={traceStep ? [traceStep.source, traceStep.target] : undefined} highlightedEdgeIds={traceStep ? [traceStep.edge_id] : highlightedPath.length ? highlightedPath : selectedNode ? undefined : changeFocus?.primaryEdgeIds} emphasizedNodeIds={traceStep ? [traceStep.source, traceStep.target] : changeFocus?.primaryNodeIds} fitNodeIds={traceStep ? [traceStep.source, traceStep.target] : graphScope === 'focused' ? changeFocus?.primaryNodeIds : undefined} expanded={view === 'graph'} visible={tab === 'graph'} /></Suspense></div>
+              <div hidden={tab !== 'graph'}><Suspense fallback={<div className="graph-empty" role="status">Loading evidence graph…</div>}><EvidenceGraph graph={traceStep && traceGraph ? traceGraph : displayedGraph ?? result.graph} onSelect={selectNode} selectedId={inspectedNode?.id} traceNodeIds={traceStep ? [traceStep.source, traceStep.target] : undefined} highlightedEdgeIds={traceStep ? [traceStep.edge_id] : highlightedPath.length ? highlightedPath : selectedNode ? undefined : changeFocus?.primaryEdgeIds} emphasizedNodeIds={traceStep ? [traceStep.source, traceStep.target] : changeFocus?.primaryNodeIds} fitNodeIds={traceStep ? [traceStep.source, traceStep.target] : graphScope === 'focused' ? changeFocus?.primaryNodeIds : undefined} expanded={view === 'graph'} visible={tab === 'graph'} trace={traceStep && traceSequence && ui.trace ? { sequence: traceSequence, index: ui.trace.step } : undefined} clock={traceStep ? traceClock : null} /></Suspense></div>
               {tab === 'timeline' && <div className="timeline">{result.sources.length ? [...result.sources].sort((a, b) => timestampOrder(a.timestamp) - timestampOrder(b.timestamp)).map(source =>
                 <button className="timeline-event" key={source.id} onClick={() => selectSource(source)}><span className={`round-icon type-${source.type.toLowerCase()}`}><EntityIcon type={source.type} /></span><span><small>{dateLabel(source.timestamp)}</small><strong>{source.title}</strong><p>{source.snippet}</p></span></button>) : <p>No dated sources are available.</p>}</div>}
               {tab === 'sources' && <div className="source-list">{result.sources.length ? result.sources.map(source => <SourceRow source={source} key={source.id} onClick={() => selectSource(source)} />) : <p>No source records were returned.</p>}</div>}
@@ -316,6 +327,10 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
                 <td><button onClick={() => { const node = result.graph.nodes.find(n => n.id === edge.source); if (node) selectNode(node); }}>{result.graph.nodes.find(n => n.id === edge.source)?.label ?? edge.source}</button></td><td><code>{edge.type}</code><span aria-hidden="true"> →</span></td>
                 <td><button onClick={() => { const node = result.graph.nodes.find(n => n.id === edge.target); if (node) selectNode(node); }}>{result.graph.nodes.find(n => n.id === edge.target)?.label ?? edge.target}</button></td></tr>)}</tbody></table>{!result.graph.edges.length && <p>No relationships returned.</p>}</div>}
             </div>
+            {view === 'graph' && tab === 'graph' && ui.trace && <TracePlayer key={`${chat.id}/${turn?.id}`}
+              sequences={sequences} selection={ui.trace} onChange={(sequence, step) => traceChange(sequence, step, true)} onClose={closeTrace}
+              nodes={result.graph.nodes} sources={result.sources} onNode={selectNode} onSource={selectSource}
+              onMotion={attachMotion} autoPlay={watchRequest === traceOwner} onStarted={watchStarted} overallSupport={result.support_status} />}
           </section>
           {view === 'chat' && graphAvailable && <div className="answer-actions"><button className="button primary" onClick={() => { setView('graph'); setTab('graph'); }}><Maximize2 size={16} />Explore in graph<ArrowRight size={16} /></button><button className="button" onClick={() => setTab('sources')}><BookOpen size={17} />Inspect sources</button><button className="button" onClick={newChat}><Plus size={17} />New question</button></div>}
           {result.metadata.warnings.filter(w => !w.startsWith('Development fixture') && (!isChangeResponse(result) || !result.data.limitations.includes(w))).map(warning => <p key={warning} className="evidence-warning"><CircleAlert size={15} />{warning}</p>)}

@@ -1,6 +1,8 @@
 import type { ChangeEvidenceReference, ChangeResponse, ExpertEvidence, FreshnessPath, GraphNode, ImpactFinding, Source, TraceSequence } from '../types';
 import { CHANGE_TOOL_LABELS, historicalPathReference } from '../change';
 import { traceSequences } from '../traceValidation';
+import { preferredTrace } from '../tracePresentation';
+import { Play } from 'lucide-react';
 import EntityIcon from './EntityIcon';
 import { SourceRow } from './Inspector';
 import { useState } from 'react';
@@ -13,13 +15,15 @@ function ProofDetails({ summary, children }: { summary: ReactNode; children: Rea
   </details>;
 }
 
-export default function ChangeBrief({ result, onNode, onSource, onPath, onEvidence, onTrace }: {
+export default function ChangeBrief({ result, onNode, onSource, onPath, onEvidence, onTrace, onWatch }: {
   result: ChangeResponse; onNode: (node: GraphNode) => void; onSource: (source: Source) => void;
   onPath: (finding: ImpactFinding) => void; onEvidence: (ref: ChangeEvidenceReference) => void;
   onTrace?: (sequence: TraceSequence) => void;
+  onWatch?: (sequence: TraceSequence) => void;
 }) {
   const { data } = result;
   const playback = traceSequences(result);
+  const preferred = preferredTrace(playback);
   function traceButton(tool: TraceSequence['tool'], pathId: string) {
     const sequence = playback.find(s => s.tool === tool && s.path_id === pathId);
     return sequence && onTrace && <button className="button small" onClick={() => onTrace(sequence)}>Trace {tool === 'decision_trace' ? 'historical' : 'impact'} path {pathId}</button>;
@@ -71,7 +75,10 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
   }
   return <div className="change-brief">
     <header className="change-brief-header"><p className="eyebrow">Change Intelligence</p><h2>Change Brief</h2>
-      <p className="muted">A proposal review assembled from retrieved evidence. No change or validation has been performed.</p></header>
+      <p className="muted">A proposal review assembled from retrieved evidence. No change or validation has been performed.</p>
+      <div className="watch-trace-entry"><button className="button primary watch-trace" disabled={!preferred || !onWatch}
+        onClick={() => { if (preferred) onWatch?.(preferred); }}><Play size={18} />Watch Evidence Trace</button>
+        <p className="small muted">{preferred ? 'Follow the verified connections behind this change.' : 'No playable evidence path was returned. The original brief remains available.'}</p></div></header>
     {result.metadata.generation === 'openrouter' && <section className="change-section" aria-label="Grounded overview">
       <h3>Grounded overview</h3><p className="small muted">Hosted selection of validated statements. The structured evidence below remains authoritative.</p>
       <div className="change-narrative">{narrative(result.answer)}</div>

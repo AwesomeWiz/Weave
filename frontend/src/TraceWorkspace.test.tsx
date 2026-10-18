@@ -33,6 +33,24 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllTimers(); vi.useRealTimers(); vi.resetAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Trace Mode in persistent conversations', () => {
+  it('offers Watch Evidence Trace before the brief sections, prefers the real architecture sequence and plays only on request', async () => {
+    await ready(repository());
+    const watch = screen.getByRole('button', { name: 'Watch Evidence Trace' });
+    expect(watch.compareDocumentPosition(screen.getByRole('region', { name: 'Proposed Change' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByLabelText('Trace Mode')).not.toBeInTheDocument();
+    click('Watch Evidence Trace'); expect(screen.getByLabelText('Trace sequence')).toHaveValue(sequenceId);
+    expect(screen.getByText('Step 1 of 3 · Playing')).toBeInTheDocument();
+    expect(screen.getByText(/Some evidence is incomplete/)).toBeVisible();
+    expect(askQuestion).not.toHaveBeenCalled(); expect(analyzeChange).not.toHaveBeenCalled(); expect(getHealth).toHaveBeenCalledTimes(1);
+  });
+  it('chooses an actual remaining sequence when architecture playback was not returned', async () => {
+    const archive = seed(); const result = archive.conversations[0].turns[0].result as ReturnType<typeof changeWithPlayback>;
+    result.data.historical_context.relationship_paths = result.data.historical_context.relationship_paths!.filter(p => p.id !== 'decision_to_current_architecture');
+    result.data.trace_playback!.sequences = result.data.trace_playback!.sequences.filter(s => s.id !== sequenceId);
+    await ready(repository(archive)); click('Watch Evidence Trace');
+    expect(screen.getByLabelText('Trace sequence')).toHaveValue('decision_trace/incident_to_investigation');
+    expect(screen.getByText('Step 1 of 1 · Playing')).toBeInTheDocument();
+  });
   it('opens both historical and Impact paths, highlights exact nodes/edge, and synchronizes Inspector without requests', async () => {
     const repo = repository(); await ready(repo);
     click('Trace historical path decision_to_current_architecture');
@@ -44,7 +62,7 @@ describe('Trace Mode in persistent conversations', () => {
     click('Next step');
     expect(screen.getByTestId('trace-graph')).toHaveAttribute('data-edges', 'commit:8fae2|CHANGES|service:payment-service');
     expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('service:payment-service');
-    click('Inspect source entity'); expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('commit:8fae2');
+    fireEvent.click(screen.getByText('View evidence')); click('Inspect source entity'); expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('commit:8fae2');
     click('Back to answer'); expect(screen.getByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Relevant Reviewers' })).toHaveTextContent('Score 16');
     click('Trace impact path service:order-service'); click('Next step');
@@ -93,7 +111,7 @@ describe('Trace Mode in persistent conversations', () => {
     expect(repo.snapshot().conversations[0].ui.trace).toBeNull();
   });
   it('allows opening and closing from the graph workspace without covering the brief', async () => {
-    await ready(repository()); click('Knowledge Graph'); click('Open Trace Mode');
+    await ready(repository()); click('Knowledge Graph'); click('Watch Evidence Trace');
     expect(screen.getByLabelText('Trace Mode')).toBeInTheDocument(); click('Close Trace Mode');
     expect(screen.queryByLabelText('Trace Mode')).not.toBeInTheDocument(); click('Back to answer');
     expect(screen.getByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
@@ -127,6 +145,6 @@ describe('Trace Mode in persistent conversations', () => {
   it('shows legacy paths normally but cannot manufacture playback metadata', async () => {
     const archive = seed(); delete (archive.conversations[0].turns[0].result as ReturnType<typeof changeWithPlayback>).data.trace_playback;
     await ready(repository(archive)); expect(screen.queryByRole('button', { name: 'Trace historical path decision_to_current_architecture' })).not.toBeInTheDocument();
-    click('Knowledge Graph'); expect(screen.getByRole('button', { name: 'Open Trace Mode' })).toBeDisabled();
+    click('Knowledge Graph'); expect(screen.getByRole('button', { name: 'Watch Evidence Trace' })).toBeDisabled();
   });
 });

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracePlayer from './components/TracePlayer';
 import { changeWithPlayback } from './test/tracePlaybackFixture';
+import { traceSentence } from './tracePresentation';
 
 const result = changeWithPlayback();
 const sequences = result.data.trace_playback!.sequences;
@@ -23,9 +24,10 @@ describe('local deterministic Trace Mode controls', () => {
   it('starts paused, plays one step at a time, pauses and resumes through completion', () => {
     render(<Harness />); expect(screen.getByText('Step 1 of 3 · Paused')).toBeInTheDocument();
     click('Play'); advance(); expect(screen.getByText('Step 2 of 3 · Playing')).toBeInTheDocument();
-    expect(screen.getByText(architecture.steps[1].explanation)).toBeInTheDocument();
+    expect(screen.getByText(traceSentence(architecture.steps[1], result.graph.nodes), { selector: '.trace-current p' })).toBeInTheDocument();
     click('Pause'); advance(9000); expect(screen.getByText('Step 2 of 3 · Paused')).toBeInTheDocument();
-    click('Play'); advance(); expect(screen.getByText('Step 3 of 3 · Paused')).toBeInTheDocument();
+    click('Play'); advance(); expect(screen.getByText('Step 3 of 3 · Playing')).toBeInTheDocument();
+    advance(); expect(screen.getByText('Step 3 of 3 · Paused')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
     expect(screen.getByRole('progressbar', { name: 'Trace progress' })).toHaveAttribute('value', '3');
   });
@@ -36,15 +38,28 @@ describe('local deterministic Trace Mode controls', () => {
     click('Next step'); click('Next step'); click('Replay');
     expect(screen.getByText('Step 1 of 3 · Playing')).toBeInTheDocument(); advance(); expect(screen.getByText('Step 2 of 3 · Playing')).toBeInTheDocument();
   });
+  it('resumes halfway through an edge using the remaining time instead of restarting its deadline', () => {
+    render(<Harness />); click('Play'); advance(550); click('Pause'); advance(9000); click('Play');
+    advance(1649); expect(screen.getByText('Step 1 of 3 · Playing')).toBeInTheDocument();
+    advance(1); expect(screen.getByText('Step 2 of 3 · Playing')).toBeInTheDocument();
+  });
+  it('keeps canonical IDs and provenance inside the evidence disclosure', () => {
+    render(<Harness />);
+    const raw = screen.getByText(architecture.steps[0].edge_id, { selector: 'code' });
+    expect(raw).not.toBeVisible(); expect(screen.getByText('Decision D-007 was implemented through Commit 8fae2.', { selector: '.trace-current p' })).toBeVisible();
+    fireEvent.click(screen.getByText('View evidence')); expect(raw).toBeVisible();
+    expect(screen.getByText('decision_trace', { selector: 'code' })).toBeVisible();
+    expect(screen.getByText(/Graph-only step; no textual citation/)).toBeVisible();
+  });
   it('switches to an Impact sequence, cancels the old timer and retains stored direction', () => {
     render(<Harness />); click('Play');
     fireEvent.change(screen.getByLabelText('Trace sequence'), { target: { value: 'impact_analysis/service:order-service' } });
     advance(9000); expect(screen.getByText('Step 1 of 3 · Paused')).toBeInTheDocument();
-    expect(screen.getByText(/Traversal proceeds from dependency to dependent/)).toBeInTheDocument();
+    expect(screen.getByText(/This does not mean they will necessarily fail/)).toBeInTheDocument();
     click('Next step'); expect(onChange).toHaveBeenLastCalledWith('impact_analysis/service:order-service', 1);
   });
   it('syncs the existing entity Inspector and labels steps without textual citations', () => {
-    render(<Harness />); click('Play'); click('Inspect target entity');
+    render(<Harness />); click('Play'); fireEvent.click(screen.getByText('View evidence')); click('Inspect target entity');
     expect(onNode).toHaveBeenLastCalledWith(result.graph.nodes.find(n => n.id === 'commit:8fae2'));
     expect(screen.getByText(/Graph-only step; no textual citation assigned/)).toBeInTheDocument();
     advance(9000); expect(screen.getByText('Step 1 of 3 · Paused')).toBeInTheDocument(); expect(onSource).not.toHaveBeenCalled();
@@ -71,8 +86,9 @@ describe('local deterministic Trace Mode controls', () => {
     expect(screen.getByText('Step 2 of 3 · Playing')).toBeInTheDocument();
     await user.keyboard(' '); expect(screen.getByText('Step 2 of 3 · Paused')).toBeInTheDocument();
   });
-  it('supports single-step paths without scheduling an advance', () => {
+  it('animates a single-step path without navigating beyond its returned evidence', () => {
     render(<Harness initial={sequences[0].id} />); expect(screen.getByText('Step 1 of 1 · Paused')).toBeInTheDocument();
+    click('Play'); expect(screen.getByText('Step 1 of 1 · Playing')).toBeInTheDocument(); advance();
     expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled(); click('Replay'); advance(9000);
     expect(screen.getByText('Step 1 of 1 · Paused')).toBeInTheDocument();
   });
