@@ -276,6 +276,8 @@ The live gates require an actual seeded FalkorDB, real adapters and explicit opt
 
 ## Deployment
 
+For Railway + Vercel + FalkorDB Cloud, follow the [deployment runbook](docs/DEPLOYMENT_RUNBOOK.md): exact settings, authenticated TLS, approved hosted seeding, public smoke tests and rollback. No local Docker is required for that deployment path. Hosting accounts, the seeded Cloud instance and public end-to-end acceptance remain manual prerequisites.
+
 Intended topology: **HTTPS static frontend → FastAPI API → private FalkorDB with persistent storage**. Build `frontend/dist` with `npm.cmd --prefix frontend run build`; serve it with an `/api` reverse proxy, or set `VITE_API_URL` before building and configure matching backend CORS origins. `vite preview` alone does not provide the production API.
 
 Deploy FastAPI as a separate Python service, provision/ingest the approved graph, configure backend secrets, and verify database/tool health plus the canonical query. Add access control and appropriate network boundaries before exposing company data: application authentication is not implemented. The local Compose file binds Redis protocol access to loopback; its `latest` image tag should be recorded/pinned by the release operator for reproducibility. Local startup binds FastAPI to `127.0.0.1`; a hosted service needs the platform's listener configuration.

@@ -37,6 +37,7 @@ class GraphClient:
             host=self.host,
             port=self.port,
             username=username, password=password, ssl=ssl,
+            ssl_cert_reqs="required", ssl_check_hostname=True,
             socket_connect_timeout=socket_connect_timeout, socket_timeout=socket_timeout,
         )
         self.graph = self.db.select_graph(self.graph_name)

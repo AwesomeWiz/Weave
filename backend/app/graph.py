@@ -107,7 +107,8 @@ class FalkorGateway:
                 username=self.settings.falkordb_username or None,
                 password=(self.settings.falkordb_password.get_secret_value()
                           if self.settings.falkordb_password else None),
-                ssl=self.settings.falkordb_ssl, socket_connect_timeout=2, socket_timeout=2,
+                ssl=self.settings.falkordb_ssl, ssl_cert_reqs="required", ssl_check_hostname=True,
+                socket_connect_timeout=2, socket_timeout=2,
             )
             try:
                 # A Redis PING alone does not prove the graph module/data is available.

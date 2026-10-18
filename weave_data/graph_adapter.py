@@ -216,7 +216,8 @@ class FalkorDBGraphAdapter(GraphAdapter):
 
         self._client = FalkorDBClient(
             host=self._host, port=self._port, username=username, password=password,
-            ssl=ssl, socket_connect_timeout=socket_connect_timeout, socket_timeout=socket_timeout,
+            ssl=ssl, ssl_cert_reqs="required", ssl_check_hostname=True,
+            socket_connect_timeout=socket_connect_timeout, socket_timeout=socket_timeout,
         )
         self._graph = self._client.select_graph(self._graph_name)
 

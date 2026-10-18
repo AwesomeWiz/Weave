@@ -1,5 +1,7 @@
 # Running and verifying Weave
 
+For Railway + Vercel + FalkorDB Cloud without local Docker, use the [deployment runbook](DEPLOYMENT_RUNBOOK.md). Hosted provisioning, seeding approval and public acceptance remain manual release steps.
+
 The [root quick start](../README.md#quick-start-the-real-graph-workflow) is the recommended local demo path. All commands below run from the repository root. Use an owned local graph for ingestion and keep hosted generation disabled until any data transmission has been reviewed.
 
 ## Windows PowerShell
