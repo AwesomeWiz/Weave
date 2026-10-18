@@ -164,8 +164,8 @@ describe('structured Change Brief in the existing workspace', () => {
   });
   it('restores a Change Brief from history with its structured data and controls', async () => {
     const user = await openBrief();
-    await user.click(within(screen.getByLabelText('Main navigation')).getByRole('button', { name: 'New question' }));
-    await user.click(screen.getByRole('button', { name: /What happens if we remove Redis from Payment Service\?\s*This session/ }));
+    await user.click(within(screen.getByLabelText('Main navigation')).getByRole('button', { name: 'New Chat' }));
+    await user.click(screen.getByRole('button', { name: 'Open chat: What happens if we remove Redis from Payment Service?' }));
     expect(screen.getByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Relevant Reviewers' })).toHaveTextContent('Score 16');
     expect(analyzeChange).toHaveBeenCalledTimes(1);
