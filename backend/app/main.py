@@ -67,6 +67,12 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
         return error_response("INTERNAL_ERROR", "Weave could not complete this request. "
                               "Please retry or check the backend configuration.", 500)
 
+    @app.get("/healthz")
+    async def process_health():
+        # Hosting health checks must not contact graph or optional LLM providers.
+        # Dependency readiness remains available separately at /api/health.
+        return {"status": "ok"}
+
     @app.get("/api/health", response_model=HealthResponse)
     async def health():
         graph_probe, llm_probe = await asyncio.gather(
