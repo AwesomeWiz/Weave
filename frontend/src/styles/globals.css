@@ -211,3 +211,28 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .impact-sources { display: flex; flex-wrap: wrap; gap: 8px; }
 .impact-finding .button[aria-pressed="true"] { background: var(--brand-075); border-color: var(--brand-800); }
 @media (max-width: 600px) { .impact-controls label { flex: 1 1 130px; } .impact-controls .button { width: 100%; justify-content: center; } .impact-finding { padding: 11px; } }
+
+/* Change Brief shares the paper surfaces, evidence controls, and inspector. */
+.change-action { display: flex; align-items: center; gap: 14px; width: 100%; max-width: 700px; margin-top: 14px; padding: 16px 20px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--brand-075); color: var(--brand-900); text-align: left; }
+.change-action > span { flex: 1; }.change-action strong { display: block; font-size: 14px; }.change-action small { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 12px; }.change-action:hover { background: var(--surface-selected); }
+.change-brief { min-width: 0; line-height: 1.65; font-size: 13px; overflow-wrap: anywhere; }
+.change-brief-header { padding: 10px 0 20px; }.change-brief-header h2 { font: 36px/1.2 'Instrument Serif', Georgia, serif; margin: 5px 0 10px; }
+.change-contents { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 14px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.change-contents a { font-size: 11px; color: var(--brand-800); text-decoration: none; padding: 3px 0; }.change-contents a:hover { text-decoration: underline; }
+.change-section { padding: 25px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 18px; }.change-section:last-child { border: 0; padding-bottom: 0; }
+.change-section > h3 { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; color: var(--text-muted); font-size: 11px; font-weight: 400; }.change-section > h3 span { color: var(--text-primary); font-size: 18px; font-weight: 600; }
+.change-section h4 { font-size: 14px; font-weight: 600; }.change-section p + p { margin-top: 8px; }.change-proposal { font-size: 18px; font-weight: 500; color: var(--brand-900); }
+.change-section > .support-badge { display: inline-flex; }
+.change-targets { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; }.change-targets > span { display: grid; gap: 4px; }.change-targets code, .change-document > code { font-size: 10px; color: var(--text-muted); }
+.change-caution { padding: 10px 12px; border-left: 3px solid var(--brand-600); background: var(--brand-075); margin: 12px 0; }.change-narrative p { margin-top: 12px; white-space: pre-wrap; }
+.change-proof { margin: 10px 0; font-size: 12px; }.change-proof summary { cursor: pointer; color: var(--brand-800); padding: 5px 0; }.change-proof[open] > summary { margin-bottom: 9px; }.change-proof > ul { padding-left: 18px; }.change-proof .impact-path { padding-left: 9px; border-left: 1px solid var(--border-strong); }
+.change-citations { display: inline-flex; flex-wrap: wrap; gap: 6px; }.change-citations .citation { overflow-wrap: anywhere; }
+.change-impact-group { margin-top: 20px; }.change-impact, .change-reviewer, .change-document { padding: 16px 0; border-bottom: 1px solid var(--border); }.change-impact:last-child, .change-reviewer:last-child, .change-document:last-child { border-bottom: 0; }
+.change-impact > code { font-size: 10px; color: var(--text-muted); }.change-impact .button { margin: 8px 0; }.change-impact .panel-heading, .change-document .panel-heading { flex-wrap: wrap; }
+.change-reasons { list-style: disc; padding-left: 18px; font-size: 12px; color: var(--text-secondary); margin: 7px 0; }.change-risk { border-left: 3px solid var(--brand-600); padding: 12px 14px; margin: 12px 0; background: var(--brand-075); }
+.change-classification { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .5px; margin-bottom: 6px; }.change-risk.inferred_risk { border-color: #b17b22; background: #fcf7ec; }.change-risk.inferred_risk .change-classification { color: #795314; }.change-risk.recommendation { border-color: #6883a4; background: #f3f6fa; }
+.change-validation { padding-left: 22px; margin-top: 16px; }.change-validation > li { padding: 6px 0 14px 6px; }.change-validation > li::marker { color: var(--brand-700); }
+.change-conditional { padding-left: 14px; border-left: 3px solid #a8b9cf; margin-top: 10px; }.change-condition { font-weight: 600; color: #405979; }.change-support { margin: 12px 0; }.change-support > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 14px; padding: 8px 0; border-bottom: 1px solid var(--border); }.change-support dd { color: var(--text-muted); font-size: 11px; }
+.change-limitations { padding-top: 16px; }.change-limitations ul { padding-left: 18px; color: var(--text-secondary); font-size: 12px; }.change-limitations li { margin-top: 8px; }
+.change-graph-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border); }.change-graph-controls .small { flex: 1 1 180px; }.change-graph-controls .button[aria-pressed="true"] { background: var(--brand-075); border-color: var(--brand-600); }
+@media (max-width: 600px) { .change-brief-header h2 { font-size: 30px; }.change-section > h3 { gap: 8px; }.change-section > h3 span { font-size: 16px; }.change-proposal { font-size: 16px; }.change-risk { padding: 10px; }.change-contents a { padding: 6px 0; }.change-proof summary { min-height: 36px; }.change-action { padding: 14px; }.change-graph-controls { padding: 12px; } }

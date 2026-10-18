@@ -32,24 +32,26 @@ function DetourEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, label, 
 
 const edgeTypes = { detour: DetourEdge };
 
-function InitialFit({ visible }: { visible: boolean }) {
+function InitialFit({ visible, fitNodeIds, graphKey }: { visible: boolean; fitNodeIds: string[]; graphKey: string }) {
   const initialized = useNodesInitialized({ includeHiddenNodes: true });
   const { fitView } = useReactFlow();
   const width = useStore(state => state.width);
   const height = useStore(state => state.height);
-  const fitted = useRef(false);
+  const fitted = useRef('');
+  const key = graphKey + '/' + fitNodeIds.join('|') + (fitNodeIds.length ? `/${width}x${height}` : '');
   useEffect(() => {
-    if (!visible || !initialized || !width || !height || fitted.current) return;
+    if (!visible || !initialized || !width || !height || fitted.current === key) return;
     const frame = requestAnimationFrame(() => {
-      void fitView({ padding: { top: '40px', right: '25px', bottom: '55px', left: '25px' } }).then(success => { if (success) fitted.current = true; });
+      void fitView({ ...(fitNodeIds.length ? { nodes: fitNodeIds.map(id => ({ id })) } : {}),
+        padding: { top: '40px', right: '25px', bottom: '55px', left: '25px' } }).then(success => { if (success) fitted.current = key; });
     });
     return () => cancelAnimationFrame(frame);
-  }, [visible, initialized, width, height, fitView]);
+  }, [visible, initialized, width, height, fitView, fitNodeIds, key]);
   return null;
 }
 
-export default function EvidenceGraph({ graph, onSelect, selectedId, highlightedEdgeIds = [], expanded = false, visible = true }: {
-  graph: Graph; onSelect: (node: GraphNode) => void; selectedId?: string; highlightedEdgeIds?: string[]; expanded?: boolean; visible?: boolean;
+export default function EvidenceGraph({ graph, onSelect, selectedId, highlightedEdgeIds = [], emphasizedNodeIds = [], fitNodeIds = [], expanded = false, visible = true }: {
+  graph: Graph; onSelect: (node: GraphNode) => void; selectedId?: string; highlightedEdgeIds?: string[]; emphasizedNodeIds?: string[]; fitNodeIds?: string[]; expanded?: boolean; visible?: boolean;
 }) {
   const { nodes, edges } = useMemo(() => {
     const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
@@ -121,14 +123,14 @@ export default function EvidenceGraph({ graph, onSelect, selectedId, highlighted
     return {
       nodes: nodes.map(node => ({ ...node, selected: node.id === selectedId,
         className: selectedId && neighbors.has(node.id) ? 'connected-node' : '',
-        style: { opacity: selectedId && !neighbors.has(node.id) ? 0.75 : 1 } })),
+        style: { opacity: selectedId ? (!neighbors.has(node.id) ? 0.75 : 1) : emphasizedNodeIds.length && !emphasizedNodeIds.includes(node.id) ? 0.65 : 1 } })),
       edges: edges.map(edge => {
         const connected = highlightedEdgeIds.length ? highlightedEdgeIds.includes(edge.id) : edge.source === selectedId || edge.target === selectedId;
         return { ...edge, style: { ...edge.style, stroke: connected ? '#315d48' : '#7b9181', strokeWidth: connected ? 2.4 : 1.3, opacity: selectedId && !connected ? 0.55 : 1 },
           markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: connected ? '#315d48' : '#7b9181' } };
       }),
     };
-  }, [nodes, edges, graph.edges, selectedId, highlightedEdgeIds]);
+  }, [nodes, edges, graph.edges, selectedId, highlightedEdgeIds, emphasizedNodeIds]);
 
   if (!graph.nodes.length) return <div className="graph-empty"><GitEmpty />No connected graph evidence was returned.</div>;
   return <div className={`graph-canvas ${expanded ? 'expanded' : ''}`} aria-label="Evidence graph">
@@ -139,7 +141,7 @@ export default function EvidenceGraph({ graph, onSelect, selectedId, highlighted
     <ReactFlow nodes={highlighted.nodes} edges={highlighted.edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
       minZoom={0.25} maxZoom={1.6} nodesConnectable={false} edgesFocusable={false}
       onNodeClick={(_event, node) => onSelect(node.data.entity)}>
-      <InitialFit visible={visible} />
+      <InitialFit visible={visible} fitNodeIds={fitNodeIds} graphKey={graph.nodes.map(n => n.id).join('|')} />
       <Background color="#dce4da" gap={22} size={1} />
       <Controls showInteractive={false} />
       {expanded && <MiniMap pannable zoomable nodeColor="#cedbcd" />}

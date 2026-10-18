@@ -45,6 +45,8 @@ class ToolEvidence:
     context: EvidenceContext
     # Actual validated impact traversal sequences; never inferred at merge time.
     relationship_paths: tuple[tuple[str, ...], ...] = ()
+    # Optional structured output, populated only by the capability's validator.
+    data: BaseModel | None = None
 
 
 @dataclass
@@ -56,6 +58,7 @@ class ToolProvenance:
     relationship_paths: tuple[tuple[str, ...], ...]
     state: Literal["validated", "unavailable", "invalid", "unregistered"] = "validated"
     summary: str = ""
+    data: BaseModel | None = None
 
 
 @dataclass
@@ -161,6 +164,7 @@ def merge_contexts(results: list[ToolEvidence], limitations: list[str] | None = 
             tuple(dict.fromkeys(local_edges.values())), tuple(dict.fromkeys(s.id for s in context.sources)),
             tuple(tuple(local_edges[id] for id in path) for path in result.relationship_paths),
             summary=context.summary,
+            data=result.data.model_copy(deep=True) if result.data is not None else None,
         )
         # Keep narratives distinct. Already-cited historical sources remain in
         # the packet/inspector; avoid repeating their excerpts in a sibling summary.

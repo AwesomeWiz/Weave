@@ -1,4 +1,5 @@
-import type { ExpertInput, ExpertResponse, FreshnessInput, FreshnessResponse, Health, ImpactInput, ImpactResponse, QueryResponse } from './types';
+import type { ChangeInput, ChangeResponse, ExpertInput, ExpertResponse, FreshnessInput, FreshnessResponse, Health, ImpactInput, ImpactResponse, QueryResponse } from './types';
+import { validChangeData } from './changeValidation';
 
 export class ApiError extends Error {
   constructor(message: string, public code = 'REQUEST_FAILED') { super(message); }
@@ -79,6 +80,15 @@ async function postEvidence(path: string, body: unknown): Promise<QueryResponse>
 
 export function askQuestion(question: string): Promise<QueryResponse> {
   return postEvidence('/api/query', { question, session_id: 'weave-browser' });
+}
+
+export async function analyzeChange(request: ChangeInput): Promise<ChangeResponse> {
+  const response = await postEvidence('/api/change-intelligence', request);
+  const data: unknown = 'data' in response ? response.data : undefined;
+  if (!validChangeData(data, response, request)) {
+    throw new ApiError('The API returned an incompatible Change Brief evidence format.', 'INVALID_RESPONSE');
+  }
+  return { ...response, data };
 }
 
 export async function analyzeImpact(request: ImpactInput): Promise<ImpactResponse> {

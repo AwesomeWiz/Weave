@@ -40,7 +40,7 @@ def _impact(result, records, arguments):
                         for step in finding.path_edges)
                   for finding in data.direct_impact + data.indirect_impact)
     return ToolEvidence("impact_analysis", "Current graph relationships and potential downstream impact",
-                        "impact_analysis", context, paths)
+                        "impact_analysis", context, paths, data=data)
 
 
 def _expert(result, records, arguments):
@@ -49,7 +49,7 @@ def _expert(result, records, arguments):
                              if (e.source, e.type, e.target) == (step.source, step.type, step.target))
                         for step in proof.path)
                   for person in data.experts for proof in person.evidence)
-    return ToolEvidence("find_expert", "Expert Finder", "find_expert", context, paths)
+    return ToolEvidence("find_expert", "Expert Finder", "find_expert", context, paths, data=data)
 
 
 def _freshness(result, records, arguments):
@@ -59,7 +59,7 @@ def _freshness(result, records, arguments):
                         for step in path)
                   for finding in data.review_candidates
                   for path in [finding.document_path, *(t.path for t in finding.triggers)])
-    return ToolEvidence("find_stale_knowledge", "Knowledge Freshness", "find_stale_knowledge", context, paths)
+    return ToolEvidence("find_stale_knowledge", "Knowledge Freshness", "find_stale_knowledge", context, paths, data=data)
 
 
 TOOL_REGISTRY = {
