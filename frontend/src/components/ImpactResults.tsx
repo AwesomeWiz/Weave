@@ -49,7 +49,7 @@ export default function ImpactResults({ result, onNode, onSource, onPath, highli
     </section>;
   }
   return <div className="impact-results">
-    <h2>Impact Analysis</h2>
+    <h2>What could be affected</h2>
     {target ? <div className="impact-target"><span className="small muted">Target entity</span>{entity(target.id)}<code>{target.id}</code></div> : <p>No supported impact target was found in the graph.</p>}
     <p className="impact-caution">Potential impact from stored dependencies. These relationships do not establish guaranteed failure.</p>
     {section('Direct Impact', result.data.direct_impact)}

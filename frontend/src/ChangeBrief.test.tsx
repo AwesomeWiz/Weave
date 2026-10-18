@@ -26,8 +26,9 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllGlobals(); });
 async function openBrief() {
   const user = userEvent.setup(); render(<App />);
-  await user.click(screen.getByRole('button', { name: /Change Intelligence/ }));
-  await screen.findByRole('heading', { name: 'Change Brief' });
+  await user.click(screen.getByRole('button', { name: /Assess a change/ }));
+  await screen.findByRole('heading', { name: 'Change Assessment' });
+  await user.click(screen.getByText('Ordered historical evidence paths'));
   return user;
 }
 
@@ -66,7 +67,7 @@ describe('structured Change Brief in the existing workspace', () => {
     await openBrief();
     expect(screen.getByText('No ordered historical paths were returned. No sequence has been inferred from the graph.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Highlight historical path/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Historical Context' })).toHaveTextContent('issue:PAY-42');
+    expect(screen.getByRole('region', { name: 'Why the system works this way' })).toHaveTextContent('issue:PAY-42');
   });
   it('surfaces a hosted overview with working citations and unchanged structured sections', async () => {
     const hosted = structuredClone(changeFixture);
@@ -74,13 +75,13 @@ describe('structured Change Brief in the existing workspace', () => {
     hosted.answer = 'INFERRED RISK: Removing Redis may reintroduce latency pressure; this is not a benchmark. [issue:PAY-42]\n\nRecommended validation has not been performed.';
     vi.mocked(analyzeChange).mockResolvedValue(hosted);
     const user = await openBrief();
-    const overview = screen.getByRole('region', { name: 'Grounded overview' });
+    const overview = screen.getByRole('region', { name: 'Overview' });
     expect(overview).toHaveTextContent(hosted.answer.split(' [')[0]);
     expect(overview).toHaveTextContent('The structured evidence below remains authoritative.');
-    expect(within(overview).queryByRole('region', { name: 'Relevant Reviewers' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('region', { name: 'Relevant Reviewers' })).toHaveLength(1);
-    expect(screen.getByRole('region', { name: 'Relevant Reviewers' })).toHaveTextContent('Score 16');
-    expect(screen.getByRole('region', { name: 'Documents to Review if Change Proceeds' })).toHaveTextContent('If this change is approved and implemented');
+    expect(within(overview).queryByRole('region', { name: 'Who should review this' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: 'Who should review this' })).toHaveLength(1);
+    expect(screen.getByRole('region', { name: 'Who should review this' })).toHaveTextContent('Score 16');
+    expect(screen.getByRole('region', { name: 'Documents to review if the change proceeds' })).toHaveTextContent('If this change is approved and implemented');
     await user.click(within(overview).getByRole('button', { name: 'issue:PAY-42' }));
     expect(screen.getByLabelText('Source inspector')).toHaveTextContent('PAY-42');
     expect(analyzeChange).toHaveBeenCalledTimes(1); expect(askQuestion).not.toHaveBeenCalled();
@@ -93,17 +94,19 @@ describe('structured Change Brief in the existing workspace', () => {
     fallback.metadata.warnings.push(warning);
     vi.mocked(analyzeChange).mockResolvedValue(fallback);
     await openBrief();
-    expect(screen.queryByRole('region', { name: 'Grounded overview' })).not.toBeInTheDocument();
+    const overview = screen.getByRole('region', { name: 'Overview' });
+    expect(overview).toHaveTextContent(fallback.answer.split('\n\n')[0]);
+    expect(within(overview).queryByText(/Historical context \(supported\)/)).not.toBeInTheDocument();
     expect(screen.getByText(warning)).toBeInTheDocument();
-    expect(screen.getAllByRole('region', { name: 'Historical Context' })).toHaveLength(1);
-    expect(screen.getByRole('region', { name: 'Known Facts and Potential Risks' })).toHaveTextContent('INFERRED RISK');
+    expect(screen.getAllByRole('region', { name: 'Why the system works this way' })).toHaveLength(1);
+    expect(screen.getByRole('region', { name: 'Known facts and potential risks' })).toHaveTextContent('INFERRED RISK');
     expect(analyzeChange).toHaveBeenCalledTimes(1);
   });
   it('routes the canonical chat question through exactly one structured request', async () => {
     const user = userEvent.setup(); render(<App />);
     await user.click(screen.getByRole('textbox', { name: 'Ask about your company knowledge' }));
     await user.paste(CHANGE_QUESTION); await user.keyboard('{Enter}');
-    expect(await screen.findByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
     expect(analyzeChange).toHaveBeenCalledExactlyOnceWith({ target: 'Payment Service', change: CHANGE_QUESTION });
     expect(askQuestion).not.toHaveBeenCalled(); expect(analyzeImpact).not.toHaveBeenCalled();
     expect(findExperts).not.toHaveBeenCalled(); expect(checkFreshness).not.toHaveBeenCalled();
@@ -111,21 +114,21 @@ describe('structured Change Brief in the existing workspace', () => {
   });
   it('shows all nine sections and separates facts, inferences, and unperformed validation', async () => {
     await openBrief();
-    for (const name of ['Proposed Change', 'Historical Context', 'Direct and Downstream Impact', 'Relevant Reviewers',
-      'Known Facts and Potential Risks', 'Recommended Validation', 'Current Knowledge Freshness',
-      'Documents to Review if Change Proceeds', 'Supporting Evidence']) expect(screen.getByRole('region', { name })).toBeInTheDocument();
-    const risks = screen.getByRole('region', { name: 'Known Facts and Potential Risks' });
+    for (const name of ['Proposed Change', 'Why the system works this way', 'What could be affected', 'Who should review this',
+      'Known facts and potential risks', 'Recommended checks', 'Documents to review now',
+      'Documents to review if the change proceeds', 'Supporting evidence']) expect(screen.getByRole('region', { name })).toBeInTheDocument();
+    const risks = screen.getByRole('region', { name: 'Known facts and potential risks' });
     expect(within(risks).getAllByText('KNOWN FACT')).toHaveLength(3);
     expect(within(risks).getByText('INFERRED RISK')).toBeInTheDocument();
     expect(within(risks).getByText('RECOMMENDATION')).toBeInTheDocument();
     expect(screen.getByText('Recommended actions only. These checks have not been performed.')).toBeInTheDocument();
     expect(screen.getAllByText('Recommendation · Not performed').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Development fixture/, { selector: '.mode-banner' })).toBeInTheDocument();
+    expect(screen.getByText(/Sample data/, { selector: '.mode-banner' })).toBeInTheDocument();
   });
   it('keeps current freshness distinct from conditional ADR review', async () => {
     await openBrief();
-    const current = screen.getByRole('region', { name: 'Current Knowledge Freshness' });
-    const future = screen.getByRole('region', { name: 'Documents to Review if Change Proceeds' });
+    const current = screen.getByRole('region', { name: 'Documents to review now' });
+    const future = screen.getByRole('region', { name: 'Documents to review if the change proceeds' });
     expect(within(current).getByText('Review recommended')).toBeInTheDocument();
     expect(within(current).getByText('2026-05-01T12:00:00Z')).toBeInTheDocument();
     expect(within(current).queryByText('doc:ADR-7')).not.toBeInTheDocument();
@@ -135,10 +138,10 @@ describe('structured Change Brief in the existing workspace', () => {
   });
   it('preserves reviewers and inspects existing historical citations and people', async () => {
     const user = await openBrief();
-    const reviewers = screen.getByRole('region', { name: 'Relevant Reviewers' });
+    const reviewers = screen.getByRole('region', { name: 'Who should review this' });
     for (const score of [16, 14, 5]) expect(within(reviewers).getByText(`Score ${score}`)).toBeInTheDocument();
     expect(within(reviewers).getAllByText(/Personal ownership is not established/).length).toBeGreaterThan(0);
-    const history = screen.getByRole('region', { name: 'Historical Context' });
+    const history = screen.getByRole('region', { name: 'Why the system works this way' });
     await user.click(within(history).getAllByRole('button', { name: 'issue:PAY-42' })[0]);
     expect(screen.getByLabelText('Source inspector')).toHaveTextContent('PAY-42');
     await user.keyboard('{Escape}');
@@ -159,43 +162,43 @@ describe('structured Change Brief in the existing workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Change focus' }));
     expect(screen.getByTestId('change-graph').getAttribute('data-nodes')).toBe(focusedNodes);
     await user.click(screen.getByRole('button', { name: 'Back to answer' }));
-    expect(screen.getByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
     expect(analyzeChange).toHaveBeenCalledTimes(1);
   });
   it('restores a Change Brief from history with its structured data and controls', async () => {
     const user = await openBrief();
     await user.click(within(screen.getByLabelText('Main navigation')).getByRole('button', { name: 'New Chat' }));
     await user.click(screen.getByRole('button', { name: 'Open chat: What happens if we remove Redis from Payment Service?' }));
-    expect(screen.getByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Relevant Reviewers' })).toHaveTextContent('Score 16');
+    expect(screen.getByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Who should review this' })).toHaveTextContent('Score 16');
     expect(analyzeChange).toHaveBeenCalledTimes(1);
   });
   it('keeps missing sources visible as qualified graph-only evidence', async () => {
     vi.mocked(analyzeChange).mockResolvedValue(changeWithoutSources());
     const user = await openBrief();
     expect(screen.getByText('The retrieved rationale is incomplete because matching source provenance is missing.')).toBeInTheDocument();
-    const section = screen.getByRole('region', { name: 'Current Knowledge Freshness' });
+    const section = screen.getByRole('region', { name: 'Documents to review now' });
     await user.click(within(section).getByText('Document association and later changes'));
     expect(within(section).getAllByText('Graph-only change evidence; no textual citation established.').length).toBeGreaterThan(0);
-    expect(screen.getByRole('region', { name: 'Supporting Evidence' })).toHaveTextContent('No supporting textual sources were retrieved.');
+    expect(screen.getByRole('region', { name: 'Supporting evidence' })).toHaveTextContent('No supporting textual sources were retrieved.');
     expect(screen.getByText(/Matching textual provenance was not retrieved/)).toBeInTheDocument();
   });
   it.each(['unsupported', 'unresolved', 'ambiguous'] as const)('shows qualified %s proposals without invented findings', async resolution => {
     vi.mocked(analyzeChange).mockResolvedValue(unresolvedChange('Upgrade Redis in Payment Service', resolution));
     await openBrief();
     expect(screen.getByText('insufficient evidence', { selector: '.answer-meta .support-badge' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Current Knowledge Freshness' })).toHaveTextContent('No current review findings established');
+    expect(screen.getByRole('region', { name: 'Documents to review now' })).toHaveTextContent('No current review findings established');
     expect(screen.queryByText('Score 16')).not.toBeInTheDocument();
   });
   it('preserves retry and the proposed question after graph errors', async () => {
     vi.mocked(analyzeChange).mockRejectedValue(new ApiError('The graph is unavailable.', 'GRAPH_UNAVAILABLE'));
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Change Intelligence/ }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('The graph is unavailable.');
+    await user.click(screen.getByRole('button', { name: /Assess a change/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Knowledge graph unavailable');
     expect(screen.getByRole('textbox')).toHaveValue(CHANGE_QUESTION);
     vi.mocked(analyzeChange).mockResolvedValue(changeFixture);
     await user.click(screen.getByRole('button', { name: /Try again/ }));
-    expect(await screen.findByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
     expect(analyzeChange).toHaveBeenCalledTimes(2);
   });
   it('routes unsupported chat proposals to the structured endpoint for qualification', async () => {
@@ -203,7 +206,7 @@ describe('structured Change Brief in the existing workspace', () => {
     vi.mocked(analyzeChange).mockResolvedValue(unresolvedChange(change));
     const user = userEvent.setup(); render(<App />);
     await user.click(screen.getByRole('textbox')); await user.paste(change); await user.keyboard('{Enter}');
-    expect(await screen.findByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
     expect(analyzeChange).toHaveBeenCalledWith({ target: 'Payment Service', change });
     expect(askQuestion).not.toHaveBeenCalled();
     expect(screen.getByRole('region', { name: 'Proposed Change' })).toHaveTextContent('outside the validated Redis-removal scenario');
@@ -211,11 +214,11 @@ describe('structured Change Brief in the existing workspace', () => {
   it('uses the existing modal inspector and Escape dismissal at a narrow viewport', async () => {
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     const user = await openBrief();
-    const history = screen.getByRole('region', { name: 'Historical Context' });
+    const history = screen.getByRole('region', { name: 'Why the system works this way' });
     await user.click(within(history).getAllByRole('button', { name: 'issue:PAY-42' })[0]);
     expect(screen.getByRole('dialog', { name: 'Details panel' })).toHaveTextContent('PAY-42');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Details panel' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
   });
 });

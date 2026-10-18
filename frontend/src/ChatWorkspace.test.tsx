@@ -67,19 +67,20 @@ describe('persistent multi-conversation workspace', () => {
   });
   it('restores the complete Change Brief, ordered highlight and source inspector', async () => {
     const repo = repository(); const user = userEvent.setup(); let app = await ready(repo);
-    await user.click(screen.getByRole('button', { name: /Change Intelligence/ })); await screen.findByRole('heading', { name: 'Change Brief' });
+    await user.click(screen.getByRole('button', { name: /Assess a change/ })); await screen.findByRole('heading', { name: 'Change Assessment' });
+    await user.click(screen.getByText('Ordered historical evidence paths'));
     await user.click(screen.getByRole('button', { name: 'Highlight historical path decision_to_current_architecture' }));
     await waitFor(() => expect(repo.snapshot()?.conversations[0].ui.view).toBe('graph'));
     app.unmount(); app = await ready(repo);
     expect(await screen.findByRole('heading', { name: 'Knowledge Graph' })).toBeInTheDocument();
     expect(screen.getByTestId('saved-graph').getAttribute('data-edges')).toContain('CHANGES');
     await user.click(screen.getByRole('button', { name: 'Back to answer' }));
-    await user.click(within(screen.getByRole('region', { name: 'Historical Context' })).getAllByRole('button', { name: 'issue:PAY-42' })[0]);
+    await user.click(within(screen.getByRole('region', { name: 'Why the system works this way' })).getAllByRole('button', { name: 'issue:PAY-42' })[0]);
     await waitFor(() => expect(repo.snapshot()?.conversations[0].ui.selectedSourceId).toBe('issue:PAY-42'));
     const before = structuredClone(repo.snapshot()!.conversations[0].turns[0].result);
     app.unmount(); await ready(repo);
     expect(await screen.findByLabelText('Source inspector')).toHaveTextContent('PAY-42');
-    expect(screen.getByRole('region', { name: 'Relevant Reviewers' })).toHaveTextContent('Score 16');
+    expect(screen.getByRole('region', { name: 'Who should review this' })).toHaveTextContent('Score 16');
     expect(repo.snapshot()!.conversations[0].turns[0].result).toEqual(before);
     expect(analyzeChange).toHaveBeenCalledTimes(1); expect(askQuestion).not.toHaveBeenCalled();
   }, 15000);
@@ -88,10 +89,11 @@ describe('persistent multi-conversation workspace', () => {
     await send(user); await screen.findByText(`Answer to ${question}`);
     await send(user, 'A unique earlier phrase'); await screen.findByText('Answer to A unique earlier phrase');
     await user.click(screen.getByRole('button', { name: 'New Chat' }));
-    await user.click(screen.getByRole('button', { name: `Rename chat: ${question}` }));
+    await user.click(screen.getByRole('button', { name: `Chat actions: ${question}` })); await user.click(screen.getByRole('menuitem', { name: `Rename chat: ${question}` }));
     await user.clear(screen.getByRole('textbox', { name: 'Chat title' })); await user.type(screen.getByRole('textbox', { name: 'Chat title' }), 'Payment review');
     await user.click(screen.getByRole('button', { name: 'Save title' }));
     expect(screen.getByRole('button', { name: 'Open chat: New chat' })).toHaveAttribute('aria-current', 'page');
+    await user.click(screen.getByRole('button', { name: 'Search chats' }));
     await user.type(screen.getByRole('searchbox', { name: 'Search chats' }), 'unique earlier');
     expect(screen.getByRole('button', { name: 'Open chat: Payment review' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open chat: New chat' })).not.toBeInTheDocument();
@@ -100,9 +102,9 @@ describe('persistent multi-conversation workspace', () => {
   it('confirms deletion and clear history, preserving other conversations', async () => {
     const repo = repository(); const user = userEvent.setup(); await ready(repo);
     await send(user); await screen.findByText(`Answer to ${question}`); await user.click(screen.getByRole('button', { name: 'New Chat' }));
-    await user.click(screen.getByRole('button', { name: `Delete chat: ${question}` })); await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: `Chat actions: ${question}` })); await user.click(screen.getByRole('menuitem', { name: `Delete chat: ${question}` })); await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: `Open chat: ${question}` })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: `Delete chat: ${question}` }));
+    await user.click(screen.getByRole('button', { name: `Chat actions: ${question}` })); await user.click(screen.getByRole('menuitem', { name: `Delete chat: ${question}` }));
     await user.click(within(screen.getByRole('dialog', { name: 'Delete chat' })).getByRole('button', { name: 'Delete chat' }));
     await waitFor(() => expect(repo.snapshot()?.conversations).toHaveLength(1));
     expect(screen.getByRole('button', { name: 'Open chat: New chat' })).toBeInTheDocument();
@@ -153,7 +155,7 @@ describe('persistent multi-conversation workspace', () => {
     const repo = repository(); repo.save.mockRejectedValue(new Error('quota private detail'));
     const user = userEvent.setup(); await ready(repo); await send(user); await screen.findByText(`Answer to ${question}`);
     expect(await screen.findByText(/Chat history could not be saved/)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: `Delete chat: ${question}` }));
+    await user.click(screen.getByRole('button', { name: `Chat actions: ${question}` })); await user.click(screen.getByRole('menuitem', { name: `Delete chat: ${question}` }));
     await user.click(within(screen.getByRole('dialog', { name: 'Delete chat' })).getByRole('button', { name: 'Delete chat' }));
     expect(await screen.findByText(/Previously stored chats may reappear/)).toBeInTheDocument();
   });
@@ -173,10 +175,11 @@ describe('persistent multi-conversation workspace', () => {
   it('navigates workspace foundations using only records in the selected response', async () => {
     const user = userEvent.setup(); await ready(repository()); await send(user); await screen.findByText(`Answer to ${question}`);
     await user.click(screen.getByRole('button', { name: 'Services' }));
-    const page = screen.getByRole('region', { name: 'Services workspace' }); expect(page).toHaveTextContent('not a company-wide directory');
-    await user.click(within(page).getByRole('button', { name: /Saved Service/ }));
+    const page = screen.getByRole('region', { name: 'Services workspace' }); expect(page).toHaveTextContent('not a complete company directory');
+    expect(within(page).getByRole('heading', { name: 'Saved Service' })).toBeInTheDocument();
+    await user.click(within(page).getByRole('button', { name: 'View details' }));
     expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('service:test');
-    await user.click(screen.getByRole('button', { name: 'People' })); expect(screen.getByRole('region', { name: 'People workspace' })).toHaveTextContent('No people records');
+    await user.click(screen.getByRole('button', { name: 'People' })); expect(screen.getByRole('region', { name: 'People workspace' })).toHaveTextContent('No people in this answer');
     expect(askQuestion).toHaveBeenCalledTimes(1);
   });
   it('keeps the bounded 20-chat policy explicit with no automatic eviction', async () => {
@@ -184,6 +187,48 @@ describe('persistent multi-conversation workspace', () => {
     const repo = repository(archive); const user = userEvent.setup(); await ready(repo);
     await user.click(screen.getByRole('button', { name: 'New Chat' })); expect(screen.getByText(/20-chat limit/)).toBeInTheDocument();
     expect(repo.snapshot()!.conversations).toHaveLength(20);
+  });
+  it('opens and resets chat search on demand, with empty feedback and keyboard menu dismissal', async () => {
+    const user = userEvent.setup(); await ready(repository());
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ask Weave about your company' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connectors/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Search chats' }));
+    await user.type(screen.getByRole('searchbox'), 'unmatched phrase');
+    expect(screen.getByText('No chats match your search.')).toBeInTheDocument();
+    await user.keyboard('{Escape}'); expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open chat: New chat' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Chat actions: New chat' }));
+    expect(screen.getByRole('menuitem', { name: 'Rename chat: New chat' })).toHaveFocus();
+    await user.keyboard('{ArrowDown}'); expect(screen.getByRole('menuitem', { name: 'Delete chat: New chat' })).toHaveFocus();
+    await user.keyboard('{Escape}'); expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chat actions: New chat' })).toHaveFocus();
+  });
+  it('restores an exact saved change turn from another conversation without network replay', async () => {
+    const user = userEvent.setup(); const repo = repository(); await ready(repo);
+    await user.click(screen.getByRole('button', { name: /Assess a change/ }));
+    await screen.findByRole('heading', { name: 'Change Assessment' });
+    const original = repo.snapshot()!.conversations[0];
+    const originalTurn = original.turns[0].id;
+    await send(user, 'A later question'); await screen.findByText('Answer to A later question');
+    await user.click(screen.getByRole('button', { name: 'New Chat' }));
+    await user.click(screen.getByRole('button', { name: 'Changes' }));
+    const saved = screen.getByRole('region', { name: 'Saved Change Analyses workspace' });
+    expect(saved).toHaveTextContent(original.title);
+    expect(within(saved).getAllByRole('button', { name: 'Open saved assessment' })).toHaveLength(1);
+    await user.click(within(saved).getByRole('button', { name: 'Open saved assessment' }));
+    expect(screen.getByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
+    await waitFor(() => expect(repo.snapshot()!.activeId).toBe(original.id));
+    await waitFor(() => expect(repo.snapshot()!.conversations.find(c => c.id === original.id)!.ui.selectedTurnId).toBe(originalTurn));
+    expect(analyzeChange).toHaveBeenCalledTimes(1); expect(askQuestion).toHaveBeenCalledTimes(1);
+  });
+  it('prefills a new assessment from the empty saved page without performing analysis', async () => {
+    const user = userEvent.setup(); await ready(repository());
+    await user.click(screen.getByRole('button', { name: 'Changes' }));
+    expect(screen.getByText('No saved change analyses yet')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Analyze a change' }));
+    expect(screen.getByRole('textbox')).toHaveValue('What happens if we remove Redis from Payment Service?');
+    expect(analyzeChange).not.toHaveBeenCalled(); expect(askQuestion).not.toHaveBeenCalled();
   });
   it('keeps credential-like evidence in memory and never writes it to history', async () => {
     const repo = repository(); const user = userEvent.setup(); await ready(repo);

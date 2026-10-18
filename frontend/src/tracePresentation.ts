@@ -17,7 +17,7 @@ const verbs: Record<string, string> = {
 };
 export const traceRelationshipLabel = (type: string) => type.replaceAll('_', ' ').toLowerCase();
 
-export function traceSentence(step: TraceStep, nodes: GraphNode[]): string {
+export function traceSentence(step: Pick<TraceStep, 'source' | 'type' | 'target'>, nodes: GraphNode[]): string {
   const source = traceEntityName(nodes.find(n => n.id === step.source), step.source);
   const target = traceEntityName(nodes.find(n => n.id === step.target), step.target);
   return verbs[step.type] ? `${source} ${verbs[step.type]} ${target}.` : `${source} is linked to ${target} by “${step.type}”.`;

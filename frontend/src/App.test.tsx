@@ -26,8 +26,8 @@ describe('question workflow', () => {
   it('runs Freshness and inspects real citations and graph-only changes', async () => {
     vi.mocked(checkFreshness).mockResolvedValue(freshnessFixture);
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Knowledge Freshness/ }));
-    expect(await screen.findByRole('heading', { name: 'Knowledge Freshness' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Documents to review/ }));
+    expect(await screen.findByRole('heading', { name: 'Documents to review' })).toBeInTheDocument();
     expect(checkFreshness).toHaveBeenCalledWith({ entity: 'Payment Service' });
     expect(askQuestion).not.toHaveBeenCalled();
     expect(screen.getByText('Review recommended')).toBeInTheDocument();
@@ -46,8 +46,8 @@ describe('question workflow', () => {
   it('preserves Freshness outage retry and incomplete evidence warnings', async () => {
     vi.mocked(checkFreshness).mockRejectedValue(new ApiError('Graph unavailable.', 'GRAPH_UNAVAILABLE'));
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Knowledge Freshness/ }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Graph unavailable.');
+    await user.click(screen.getByRole('button', { name: /Documents to review/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Knowledge graph unavailable');
     vi.mocked(checkFreshness).mockResolvedValue({ ...freshnessFixture, support_status: 'partially_supported',
       metadata: { ...freshnessFixture.metadata, warnings: ['Missing comparable timestamps; results may be incomplete.'] } });
     await user.click(screen.getByRole('button', { name: /Try again/ }));
@@ -58,7 +58,7 @@ describe('question workflow', () => {
     vi.mocked(checkFreshness).mockResolvedValue({ ...freshnessFixture, sources: [], support_status: 'insufficient_evidence',
       data: { entity: null, review_candidates: [] } });
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Knowledge Freshness/ }));
+    await user.click(screen.getByRole('button', { name: /Documents to review/ }));
     expect(await screen.findByText(/No unambiguous service was resolved/)).toBeInTheDocument();
     expect(screen.getByText(/This does not prove the documentation is current/)).toBeInTheDocument();
     expect(screen.queryByText('Review recommended')).not.toBeInTheDocument();
@@ -67,8 +67,8 @@ describe('question workflow', () => {
   it('runs Expert Finder, distinguishes team ownership and inspects contribution sources', async () => {
     vi.mocked(findExperts).mockResolvedValue(expertFixture);
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Expert Finder/ }));
-    expect(await screen.findByRole('heading', { name: 'Expert Finder' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Who can help/ }));
+    expect(await screen.findByRole('heading', { name: 'Who can help' })).toBeInTheDocument();
     expect(findExperts).toHaveBeenCalledWith({ query: 'Who knows Payment Service?', limit: 5 });
     expect(askQuestion).not.toHaveBeenCalled();
     expect(screen.getByText('Score 9')).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe('question workflow', () => {
       metadata: { ...expertFixture.metadata, warnings: ['Topic resolution needs a specific target.'] },
     });
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Expert Finder/ }));
+    await user.click(screen.getByRole('button', { name: /Who can help/ }));
     expect(await screen.findByText(ambiguous ? /Ambiguous topic: specify/ : /No confident topic match/)).toBeInTheDocument();
     expect(screen.getByText(/No experts returned/)).toBeInTheDocument();
     expect(screen.queryByText('Score 9')).not.toBeInTheDocument();
@@ -97,8 +97,8 @@ describe('question workflow', () => {
   it('retries expert outages and preserves incomplete ranking warnings', async () => {
     vi.mocked(findExperts).mockRejectedValue(new ApiError('Graph unavailable.', 'GRAPH_UNAVAILABLE'));
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Expert Finder/ }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Graph unavailable.');
+    await user.click(screen.getByRole('button', { name: /Who can help/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Knowledge graph unavailable');
     vi.mocked(findExperts).mockResolvedValue({ ...expertFixture, support_status: 'partially_supported',
       metadata: { ...expertFixture.metadata, warnings: ['Person evidence retrieval may be incomplete because the query reached its cap of 100 rows.'] } });
     await user.click(screen.getByRole('button', { name: /Try again/ }));
@@ -113,7 +113,7 @@ describe('question workflow', () => {
     }
     vi.mocked(findExperts).mockResolvedValue(response);
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Expert Finder/ }));
+    await user.click(screen.getByRole('button', { name: /Who can help/ }));
     expect(await screen.findByText(/Graph evidence only; matching textual provenance/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'issue:PAY-42' })).not.toBeInTheDocument();
   });
@@ -128,7 +128,7 @@ describe('question workflow', () => {
     expect(await screen.findByText(/Decision Trace and Expert Finder/)).toBeInTheDocument();
     expect(askQuestion).toHaveBeenCalledWith(showcase);
     expect(findExperts).not.toHaveBeenCalled(); expect(analyzeImpact).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'PAY-42' }));
+    await user.click(screen.getByRole('button', { name: 'issue:PAY-42' }));
     expect(screen.getByLabelText('Source inspector')).toHaveTextContent('Test-only retrieved rationale excerpt.');
   });
   it('renders hosted impact explanation alongside validated findings and graph inspection', async () => {
@@ -137,7 +137,7 @@ describe('question workflow', () => {
       metadata: { ...impactFixture.metadata, generation: 'openrouter' },
     });
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Impact Analysis/ }));
+    await user.click(screen.getByRole('button', { name: /What could be affected/ }));
     expect(await screen.findByText(/Hosted explanation: Checkout Service/)).toBeInTheDocument();
     expect(screen.getByText(/Synthesized with OpenRouter/)).toBeInTheDocument();
     expect(screen.getByText('partially supported', { selector: '.support-badge' })).toBeInTheDocument();
@@ -151,9 +151,9 @@ describe('question workflow', () => {
       metadata: { ...result.metadata, generation: 'openrouter' },
     });
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Decision Trace/ }));
+    await user.click(screen.getByRole('button', { name: /Why this decision was made/ }));
     expect(await screen.findByText(/Synthesized with OpenRouter/)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'test' }));
+    await user.click(screen.getByRole('button', { name: 'decision:test' }));
     expect(screen.getByLabelText('Source inspector')).toHaveTextContent('Fixture source excerpt');
     await user.keyboard('{Escape}');
     vi.mocked(askQuestion).mockResolvedValue({ ...result, metadata: { ...result.metadata,
@@ -178,7 +178,7 @@ describe('question workflow', () => {
     expect(askQuestion).toHaveBeenCalledWith(combined);
     expect(analyzeImpact).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Impact Analysis controls')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'test' }));
+    await user.click(screen.getByRole('button', { name: 'decision:test' }));
     expect(screen.getByLabelText('Source inspector')).toHaveTextContent('Fixture source excerpt');
     await user.click(screen.getByRole('button', { name: 'Inspect graph test node' }));
     expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('decision:test');
@@ -186,8 +186,8 @@ describe('question workflow', () => {
   it('runs Impact Analysis from the card, separates findings, and inspects a highlighted path', async () => {
     vi.mocked(analyzeImpact).mockResolvedValue(impactFixture);
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Impact Analysis/ }));
-    expect(await screen.findByRole('heading', { name: 'Impact Analysis' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /What could be affected/ }));
+    expect(await screen.findByRole('heading', { name: 'What could be affected' })).toBeInTheDocument();
     expect(analyzeImpact).toHaveBeenCalledWith({ entity_id: 'service:payment-service', max_depth: 2 });
     expect(askQuestion).not.toHaveBeenCalled();
     expect(within(screen.getByRole('region', { name: 'Direct Impact' })).getByText('service:checkout-service')).toBeInTheDocument();
@@ -204,7 +204,7 @@ describe('question workflow', () => {
     vi.mocked(analyzeImpact).mockRejectedValue(new ApiError('No graph connection.', 'GRAPH_UNAVAILABLE'));
     const user = userEvent.setup(); render(<App />);
     await user.type(screen.getByRole('textbox'), 'What services would be impacted if Redis were removed?{Enter}');
-    expect(await screen.findByRole('alert')).toHaveTextContent('No graph connection.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Knowledge graph unavailable');
     expect(analyzeImpact).toHaveBeenCalledWith({ entity_id: 'tech:redis', max_depth: 2 });
     await user.click(screen.getByRole('button', { name: /Try again/ }));
     expect(analyzeImpact).toHaveBeenCalledTimes(2);
@@ -217,8 +217,8 @@ describe('question workflow', () => {
     await user.type(screen.getByRole('textbox', { name: 'Ask about your company knowledge' }), 'Why does Payment Service use Redis?{Enter}');
     await screen.findByText(/Test-only evidence summary/);
     expect(askQuestion).toHaveBeenCalledWith('Why does Payment Service use Redis?');
-    expect(screen.getByText('Development fixture')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'test' }));
+    expect(screen.getByText('Sample data — results are for exploration, not live company records.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'decision:test' }));
     expect(screen.getByText('Fixture source excerpt')).toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(screen.queryByText('Fixture source excerpt')).not.toBeInTheDocument();
@@ -229,7 +229,8 @@ describe('question workflow', () => {
     render(<App />);
     await user.type(screen.getByRole('textbox'), 'Why was Redis introduced?');
     await user.click(screen.getByRole('button', { name: 'Ask question' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Configure the graph adapter.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('We can’t connect to your company’s knowledge graph right now.');
+    expect(screen.queryByText('Configure the graph adapter.')).not.toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveValue('Why was Redis introduced?');
     vi.mocked(askQuestion).mockResolvedValue(result);
     await user.click(screen.getByRole('button', { name: /Try again/ }));
@@ -240,7 +241,7 @@ describe('question workflow', () => {
     vi.mocked(askQuestion).mockImplementation(() => new Promise(done => { resolve = done; }));
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole('button', { name: /Decision Trace/ }));
+    await user.click(screen.getByRole('button', { name: /Why this decision was made/ }));
     expect(screen.getByRole('textbox')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Ask question' })).toBeDisabled();
     expect(askQuestion).toHaveBeenCalledTimes(1);
@@ -257,12 +258,34 @@ describe('question workflow', () => {
 });
 
 describe('workspace preferences and evidence navigation', () => {
+  it('opens a truthful empty graph and returns to the landing without a request', async () => {
+    const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Knowledge Graph' }));
+    expect(screen.getByRole('heading', { name: 'Start with an answer' })).toBeInTheDocument();
+    expect(screen.getByText(/No company-wide graph has been loaded/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ask a question' }));
+    expect(screen.getByRole('heading', { name: 'Ask Weave about your company' })).toBeInTheDocument();
+    expect(askQuestion).not.toHaveBeenCalled();
+  });
+  it('refreshes trusted graph health independently of backend availability', async () => {
+    const connected = { ...health, graph_mode: 'falkordb' as const, graph_tool: 'available' as const, falkordb: 'connected' as const, status: 'ok' as const };
+    vi.mocked(getHealth).mockResolvedValueOnce({ ...connected, falkordb: 'unavailable' });
+    const user = userEvent.setup(); const { container } = render(<App />);
+    expect(await screen.findByText('Knowledge graph unavailable')).toBeInTheDocument();
+    expect(container.querySelector('.health-connected')).toBeNull();
+    expect(screen.getByText('Backend available')).toBeInTheDocument();
+    vi.mocked(getHealth).mockResolvedValueOnce(connected);
+    await user.click(screen.getByRole('button', { name: 'Refresh connection status' }));
+    expect(await screen.findByText('Knowledge graph connected')).toBeInTheDocument();
+    expect(getHealth).toHaveBeenCalledTimes(2); expect(askQuestion).not.toHaveBeenCalled();
+  });
   it('sets, retains and clears a local name without changing the greeting pair on rerender', async () => {
     localStorage.setItem('weave.preferredName', 'Mira');
     const user = userEvent.setup();
     const { rerender } = render(<App />);
     const heading = screen.getByRole('heading', { level: 1 }).textContent;
-    expect(heading).toContain('Mira');
+    expect(heading).toBe('Ask Weave about your company');
+    expect(screen.getByText(/Mira/, { selector: '.welcome-greeting' })).toBeInTheDocument();
     rerender(<App />);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(heading!);
     await user.click(screen.getByRole('button', { name: 'Personalize greeting' }));
@@ -270,7 +293,7 @@ describe('workspace preferences and evidence navigation', () => {
     await user.type(screen.getByLabelText(/Preferred name/), '  Ana  ');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(localStorage.getItem('weave.preferredName')).toBe('Ana');
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Ana');
+    expect(screen.getByText(/Ana/, { selector: '.welcome-greeting' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Personalize greeting' }));
     await user.click(screen.getByRole('button', { name: 'Clear name' }));
     expect(localStorage.getItem('weave.preferredName')).toBe('');
@@ -291,7 +314,7 @@ describe('workspace preferences and evidence navigation', () => {
   it('opens a selected node, preserves selection through collapse, and dismisses on Escape', async () => {
     vi.mocked(askQuestion).mockResolvedValue(result);
     const user = userEvent.setup(); render(<App />);
-    await user.click(screen.getByRole('button', { name: /Decision Trace/ }));
+    await user.click(screen.getByRole('button', { name: /Why this decision was made/ }));
     await screen.findByText(/Test-only evidence summary/);
     await user.click(screen.getByRole('button', { name: 'Collapse details panel' }));
     await user.click(screen.getByRole('button', { name: 'Inspect graph test node' }));
@@ -307,10 +330,10 @@ describe('workspace preferences and evidence navigation', () => {
     vi.mocked(askQuestion).mockResolvedValue(result);
     const user = userEvent.setup(); render(<App />);
     expect(document.querySelector('.welcome-composer')).toContainElement(screen.getByRole('textbox'));
-    await user.click(screen.getByRole('button', { name: /Decision Trace/ }));
+    await user.click(screen.getByRole('button', { name: /Why this decision was made/ }));
     await screen.findByText(/Test-only evidence summary/);
     expect(document.querySelector('.docked-composer')).toContainElement(screen.getByRole('textbox'));
-    const graphTab = screen.getByRole('tab', { name: 'Evidence graph' });
+    const graphTab = screen.getByRole('tab', { name: 'Connected evidence' });
     graphTab.focus(); await user.keyboard('{ArrowRight}{ArrowRight}');
     expect(screen.getByRole('tab', { name: 'Key sources (1)' })).toHaveAttribute('aria-selected', 'true');
     await user.click(within(screen.getByRole('tabpanel')).getByRole('button', { name: /Test decision/ }));

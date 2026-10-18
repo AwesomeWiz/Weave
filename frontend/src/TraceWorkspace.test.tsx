@@ -24,7 +24,13 @@ function repository(initial = seed()) {
 async function ready(repo: ChatRepository) {
   const app = render(<App repository={repo} />); await waitFor(() => expect(screen.getByRole('button', { name: 'New Chat' })).toBeEnabled()); return app;
 }
-const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
+const click = (name: string) => {
+  if (name.startsWith('Trace historical path')) {
+    const summary = screen.getByText('Ordered historical evidence paths');
+    if (!(summary.closest('details') as HTMLDetailsElement).open) fireEvent.click(summary);
+  }
+  fireEvent.click(screen.getByRole('button', { name }));
+};
 async function ticking(ms = 2200) { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); }
 beforeEach(() => {
   localStorage.clear(); sessionStorage.clear();
@@ -63,8 +69,8 @@ describe('Trace Mode in persistent conversations', () => {
     expect(screen.getByTestId('trace-graph')).toHaveAttribute('data-edges', 'commit:8fae2|CHANGES|service:payment-service');
     expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('service:payment-service');
     fireEvent.click(screen.getByText('View evidence')); click('Inspect source entity'); expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('commit:8fae2');
-    click('Back to answer'); expect(screen.getByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Relevant Reviewers' })).toHaveTextContent('Score 16');
+    click('Back to answer'); expect(screen.getByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Who should review this' })).toHaveTextContent('Score 16');
     click('Trace impact path service:order-service'); click('Next step');
     expect(screen.getByTestId('trace-graph')).toHaveAttribute('data-edges', 'service:checkout-service|DEPENDS_ON|service:payment-service');
     expect(screen.getByTestId('trace-graph')).toHaveAttribute('data-selected', 'service:checkout-service');
@@ -88,7 +94,7 @@ describe('Trace Mode in persistent conversations', () => {
   it('pauses on evidence tab, view and workspace-page changes', async () => {
     await ready(repository()); click('Trace historical path decision_to_current_architecture'); vi.useFakeTimers(); click('Play');
     fireEvent.click(screen.getByRole('tab', { name: 'Relationships' })); await ticking(9000);
-    fireEvent.click(screen.getByRole('tab', { name: 'Evidence graph' })); expect(screen.getByText('Step 1 of 3 · Paused')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Connected evidence' })); expect(screen.getByText('Step 1 of 3 · Paused')).toBeInTheDocument();
     click('Play'); click('Back to answer'); await ticking(9000); click('Knowledge Graph');
     expect(screen.getByText('Step 1 of 3 · Paused')).toBeInTheDocument();
     click('Play'); click('Services'); await ticking(9000); click('Knowledge Graph');
@@ -96,7 +102,8 @@ describe('Trace Mode in persistent conversations', () => {
   });
   it.each(['delete', 'clear'])('cancels playback on %s and cannot recreate deleted history', async action => {
     const repo = repository(); await ready(repo); click('Trace historical path decision_to_current_architecture'); vi.useFakeTimers(); click('Play');
-    click(action === 'delete' ? 'Delete chat: Trace saved change' : 'Clear history');
+    if (action === 'delete') { click('Chat actions: Trace saved change'); fireEvent.click(screen.getByRole('menuitem', { name: 'Delete chat: Trace saved change' })); }
+    else click('Clear history');
     const dialog = screen.getByRole('dialog'); fireEvent.click(within(dialog).getByRole('button', { name: action === 'delete' ? 'Delete chat' : 'Clear history' }));
     await ticking(9000); expect(screen.queryByLabelText('Trace Mode')).not.toBeInTheDocument();
     expect(repo.snapshot().conversations.every(c => c.title !== 'Trace saved change')).toBe(true);
@@ -114,14 +121,14 @@ describe('Trace Mode in persistent conversations', () => {
     await ready(repository()); click('Knowledge Graph'); click('Watch Evidence Trace');
     expect(screen.getByLabelText('Trace Mode')).toBeInTheDocument(); click('Close Trace Mode');
     expect(screen.queryByLabelText('Trace Mode')).not.toBeInTheDocument(); click('Back to answer');
-    expect(screen.getByRole('heading', { name: 'Change Brief' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Change Assessment' })).toBeInTheDocument();
   });
   it('does not promote a source inspected in another evidence view into a graph-only step citation', async () => {
     await ready(repository()); click('Trace historical path decision_to_current_architecture');
     fireEvent.click(screen.getByRole('tab', { name: 'Key sources (5)' }));
     fireEvent.click(within(screen.getByRole('tabpanel')).getByRole('button', { name: /PAY-42/ }));
     expect(screen.getByLabelText('Source inspector')).toHaveTextContent('issue:PAY-42');
-    fireEvent.click(screen.getByRole('tab', { name: 'Evidence graph' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Connected evidence' }));
     expect(screen.queryByLabelText('Source inspector')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('commit:8fae2');
     expect(within(screen.getByLabelText('Entity inspector')).getByText('No source records linked to this entity.')).toBeInTheDocument();
@@ -146,5 +153,13 @@ describe('Trace Mode in persistent conversations', () => {
     const archive = seed(); delete (archive.conversations[0].turns[0].result as ReturnType<typeof changeWithPlayback>).data.trace_playback;
     await ready(repository(archive)); expect(screen.queryByRole('button', { name: 'Trace historical path decision_to_current_architecture' })).not.toBeInTheDocument();
     click('Knowledge Graph'); expect(screen.getByRole('button', { name: 'Watch Evidence Trace' })).toBeDisabled();
+  });
+  it('inspects workspace records outside the active trace step after leaving playback', async () => {
+    await ready(repository()); click('Watch Evidence Trace'); click('Services');
+    const order = screen.getByRole('heading', { name: 'Order Service' }).closest('article')!;
+    fireEvent.click(within(order).getByRole('button', { name: 'View details' }));
+    expect(screen.getByLabelText('Entity inspector')).toHaveTextContent('service:order-service');
+    expect(screen.queryByLabelText('Trace Mode')).not.toBeInTheDocument();
+    expect(askQuestion).not.toHaveBeenCalled(); expect(analyzeChange).not.toHaveBeenCalled();
   });
 });

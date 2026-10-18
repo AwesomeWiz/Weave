@@ -17,6 +17,7 @@
     "@fontsource/inter": "^5.2.0",
     "@xyflow/react": "^12.8.0",
     "lucide-react": "^0.468.0",
+    "marked": "18.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

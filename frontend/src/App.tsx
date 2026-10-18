@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowRight, ArrowUp, BookOpen, Box, Building2, Check, CircleAlert, Clock3, FileText, GitBranch, History, List, LoaderCircle, Maximize2, MessageSquare, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Plug, Plus, Search, Users, X } from 'lucide-react';
+import { ArrowRight, ArrowUp, BookOpen, Box, Building2, Check, CircleAlert, Clock3, FileText, GitBranch, History, List, LoaderCircle, Maximize2, MessageSquare, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Plus, Search, Users, X } from 'lucide-react';
+import AnswerContent from './components/AnswerContent';
 import { analyzeImpact, ApiError, askQuestion, analyzeChange, checkFreshness, findExperts, getHealth } from './api';
 import type { ChangeEvidenceReference, ExpertInput, FreshnessInput, GraphNode, Health, ImpactFinding, ImpactInput, QueryResponse, Source, TraceSequence } from './types';
 import TracePlayer from './components/TracePlayer';
@@ -29,16 +30,14 @@ import { greetingText, NAME_KEY, normalizeName, readPreference, sessionGreeting,
 
 const PRIMARY_QUESTION = 'Why does Payment Service use Redis?';
 const EvidenceGraph = lazy(() => import('./components/EvidenceGraph'));
-const SUGGESTIONS = ['Why was Redis introduced?', 'What evidence supports the Redis decision?', 'Why was Redis chosen for Payment Service?'];
 type EvidenceTab = 'graph' | 'timeline' | 'sources' | 'relationships';
 
 function AnswerText({ result, onSource }: { result: QueryResponse; onSource: (source: Source) => void }) {
-  const sources = new Map(result.sources.map(s => [s.id, s]));
-  return <div className="answer-text">{result.answer.split('\n\n').map((paragraph, index) =>
-    <p key={index}>{paragraph.split(/(\[[^\]]+\])/g).map((part, i) => {
-      const source = sources.get(part.slice(1, -1));
-      return source ? <button className="citation" key={i} onClick={() => onSource(source)}>{source.id.slice(source.id.indexOf(':') + 1)}</button> : part;
-    })}</p>)}</div>;
+  return <AnswerContent text={result.answer} sources={result.sources} onSource={onSource} />;
+}
+function OriginalAnswer({ result, onSource }: { result: QueryResponse; onSource: (source: Source) => void }) {
+  const [open, setOpen] = useState(false);
+  return <details className="original-answer" onToggle={event => setOpen(event.currentTarget.open)}><summary>Read the original full answer</summary>{open && <AnswerText result={result} onSource={onSource} />}</details>;
 }
 
 export default function App({ repository }: { repository?: ChatRepository } = {}) {
@@ -48,9 +47,10 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
   const turn = chat.turns.find(t => t.id === ui.selectedTurnId);
   const question = turn?.question ?? '';
   const result = turn?.result ?? null;
+  const [page, setPage] = useState<Page>('chat');
   const sequences = useMemo(() => traceSequences(result), [result]);
   const traceSequence = sequences.find(s => s.id === ui.trace?.sequenceId);
-  const traceStep = ui.view === 'graph' && ui.tab === 'graph' && traceSequence && ui.trace
+  const traceStep = page === 'chat' && ui.view === 'graph' && ui.tab === 'graph' && traceSequence && ui.trace
     ? traceSequence.steps[ui.trace.step] : undefined;
   const traceGraph = useMemo(() => {
     if (!traceSequence || !result) return null;
@@ -61,10 +61,8 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
   const impactRequest = turn?.request.impact ?? null;
   const expertRequest = turn?.request.expert ?? null;
   const freshnessRequest = turn?.request.freshness ?? null;
-  const changeRequest = turn?.request.change ?? null;
   const loading = chat.turns.some(t => t.status === 'pending');
   const error = turn?.error ? new ApiError(turn.error.message, turn.error.code) : null;
-  const [page, setPage] = useState<Page>('chat');
   const [traceClock, setTraceClock] = useState<TraceClock | null>(null);
   const [watchRequest, setWatchRequest] = useState<string | null>(null);
   const traceOwner = `${chat.id}/${turn?.id}/${traceSequence?.id}`;
@@ -94,6 +92,7 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
   const setRightCollapsed = (v: boolean) => { field('detailsOpen', !v); writePreference('weave.sidebar.right', v ? 'collapsed' : 'expanded'); };
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState(false);
+  const healthRequest = useRef(0);
   const changeFocus = useMemo(() => result && isChangeResponse(result) ? changeGraphFocus(result) : null, [result]);
   const displayedGraph = changeFocus && graphScope === 'focused' ? changeFocus.graph : result?.graph;
   const [mobileNav, setMobileNav] = useState(false);
@@ -108,8 +107,10 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const inspectorTrigger = useRef<HTMLElement | null>(null);
   const refreshHealth = useCallback(() => {
-    void getHealth().then(data => { setHealth(data); setHealthError(false); })
-      .catch(() => { setHealth(null); setHealthError(true); });
+    const request = ++healthRequest.current;
+    setHealth(null); setHealthError(false);
+    void getHealth().then(data => { if (request === healthRequest.current) { setHealth(data); setHealthError(false); } })
+      .catch(() => { if (request === healthRequest.current) { setHealth(null); setHealthError(true); } });
   }, []);
   useEffect(refreshHealth, [refreshHealth]);
   useEffect(() => {
@@ -224,9 +225,8 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
   const composer = <div className={`composer-area ${active ? 'docked-composer' : 'welcome-composer'}`}><form onSubmit={onSubmit} className="composer">
     <MessageSquare size={22} className="composer-icon" aria-hidden="true" /><label className="sr-only" htmlFor="question-input">Ask about your company knowledge</label>
     <textarea id="question-input" ref={inputRef} value={input} disabled={loading || !workspace.ready} maxLength={2000} rows={Math.min(4, input.split('\n').length)}
-      onChange={event => setInput(event.target.value)} placeholder={active ? 'Ask a follow-up question…' : 'Ask about your company knowledge…'}
+      onChange={event => setInput(event.target.value)} placeholder={active ? 'Ask a follow-up question…' : 'Ask Weave a question…'}
       onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(input); } }} />
-    <span className="composer-workspace">NovaPay</span>
     <button className="submit-button" disabled={loading || !workspace.ready || !input.trim()} aria-label="Ask question" type="submit">{loading ? <LoaderCircle className="spin" size={23} /> : <ArrowUp size={25} />}</button>
   </form><p className="composer-hint">Enter to ask · Shift + Enter for a new line<span>Answers grounded in evidence</span></p></div>;
 
@@ -236,15 +236,15 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
       <div className="brand"><img src="/weave-knot.svg" alt="" /><div><span>Weave</span><small>Company Intelligence</small></div>
         <button className="icon-button mobile-close" aria-label="Close navigation" onClick={() => setMobileNav(false)}><X size={19} /></button>
         <button className="icon-button sidebar-toggle" title={leftCollapsed ? 'Expand navigation' : 'Collapse navigation'} aria-label={leftCollapsed ? 'Expand navigation' : 'Collapse navigation'} aria-expanded={!leftCollapsed} aria-controls="navigation-panel" onClick={() => setLeftCollapsed(!leftCollapsed)}>{leftCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}</button></div>
-      <nav>
+      <div className="workspace-identity"><Building2 size={16} /><span>NovaPay <small>workspace</small></span></div>
+      <nav aria-label="Workspace">
         <button className="nav-item new-chat-action" aria-label="New Chat" title="New Chat" disabled={!workspace.ready} onClick={newChat}><Plus /><span className="nav-label">New Chat</span></button>
         <button aria-label="Chat" title="Chat" className={`nav-item ${page === 'chat' && view === 'chat' ? 'active' : ''}`} onClick={() => { setPage('chat'); setView('chat'); setMobileNav(false); }}><MessageSquare /><span className="nav-label">Chat</span></button>
-        <button aria-label="Knowledge Graph" className={`nav-item ${page === 'chat' && view === 'graph' ? 'active' : ''}`} disabled={!graphAvailable || loading} title={!graphAvailable ? 'Ask a question to explore its evidence graph' : 'Knowledge Graph'} onClick={() => { setPage('chat'); setView('graph'); setMobileNav(false); }}><Network /><span className="nav-label">Knowledge Graph</span></button>
-        <div className="workspace-shortcuts">{([[FileText, 'decisions'], [Box, 'services'], [Users, 'people'], [History, 'changes']] as const).map(([Icon, name]) =>
-          <button className={`nav-item ${page === name ? 'active' : ''}`} aria-label={PAGE_LABELS[name]} key={name} onClick={() => { setPage(name); setMobileNav(false); }}><Icon /><span className="nav-label">{PAGE_LABELS[name]}</span></button>)}</div>
-        <button className="nav-item future" disabled aria-label="Connectors — coming later"><Plug /><span className="nav-label">Connectors</span><span className="later-nav">Later</span></button>
+        <button aria-label="Knowledge Graph" className={`nav-item ${page === 'chat' && view === 'graph' ? 'active' : ''}`} disabled={loading} title="Knowledge Graph" onClick={() => { setPage('chat'); setView('graph'); setMobileNav(false); }}><Network /><span className="nav-label">Knowledge Graph</span></button>
+        <button className={`nav-item ${page === 'changes' ? 'active' : ''}`} aria-label="Changes" title="Saved Change Analyses" onClick={() => { setPage('changes'); setMobileNav(false); }}><History /><span className="nav-label">Changes</span></button>
+        <p className="nav-section-label">Explore</p><div className="workspace-shortcuts">{([[FileText, 'decisions'], [Box, 'services'], [Users, 'people']] as const).map(([Icon, name]) =>
+          <button className={`nav-item ${page === name ? 'active' : ''}`} aria-label={PAGE_LABELS[name]} title={PAGE_LABELS[name]} key={name} onClick={() => { setPage(name); setMobileNav(false); }}><Icon /><span className="nav-label">{PAGE_LABELS[name]}</span></button>)}</div>
       </nav>
-      <div className="sidebar-section"><p className="section-label">Workspace</p><div className="workspace-row"><Building2 size={21} />NovaPay<span className="tiny-tag">{fixture ? 'Demo' : 'Local'}</span></div></div>
       {workspace.ready && <ConversationList conversations={workspace.archive.conversations} activeId={chat.id}
         onSelect={id => { workspace.select(id); setPage('chat'); setMobileNav(false); setMobileInspector(false); }}
         onRename={workspace.rename} onDelete={id => { workspace.remove(id); setMobileInspector(false); }} onClear={() => { workspace.clear(); setPage('chat'); setMobileInspector(false); }} />}
@@ -258,30 +258,33 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
 
     <main inert={mobileNav || narrow && mobileInspector} className={`main-workspace ${active || page !== 'chat' ? 'has-answer' : 'welcome-workspace'}`}>
       <header className="page-header"><div className="header-heading"><button className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={mobileNav} aria-controls="navigation-panel" onClick={() => setMobileNav(true)}><List size={22} /></button>
-        {(active || page !== 'chat') && <div><h1>{page !== 'chat' ? PAGE_LABELS[page] : traceStep ? 'Trace Mode' : view === 'graph' ? 'Knowledge Graph' : 'Chat'}</h1><p>{page !== 'chat' ? 'Explore records already returned in this conversation.' : traceStep ? 'Watch how your systems connect, one step at a time.' : view === 'graph' ? 'Explore the returned evidence for this question.' : 'Ask questions about your company’s systems, decisions, people and documents.'}</p></div>}</div>
-        <div className="header-actions">{active && <span className="workspace-chip"><Building2 size={16} />NovaPay</span>}
+        {(active || view === 'graph' || page !== 'chat') && <div><h1>{page === 'changes' ? 'Saved Change Analyses' : page !== 'chat' ? PAGE_LABELS[page] : traceStep ? 'Trace Mode' : view === 'graph' ? 'Knowledge Graph' : 'Chat'}</h1><p>{page === 'changes' ? 'Return to assessments saved in this browser.' : page !== 'chat' ? 'Explore the evidence in your selected answer.' : traceStep ? 'Watch how your systems connect, one step at a time.' : view === 'graph' ? 'Connections returned for this question, not the entire company graph.' : 'Answers with sources you can explore.'}</p></div>}</div>
+        <div className="header-actions">
         {(!inspectorOpen || narrow) && <button className="icon-button" title="Expand details panel" aria-label="Expand details panel" aria-controls="details-panel" aria-expanded={inspectorOpen} onClick={toggleInspector}><PanelRightOpen size={20} /></button>}</div>
       </header>
-      {fixture && <div className="mode-banner" role="status"><span className="status-dot" />Development fixture <span>· Synthetic NovaPay evidence</span></div>}
+      {fixture && <div className="mode-banner" role="status">Sample data — results are for exploration, not live company records.</div>}
       {!workspace.ready && <p className="chat-storage-notice" role="status">Opening local chat history…</p>}
       {workspace.storageWarning && <p className="chat-storage-notice" role="status">{workspace.storageWarning}</p>}
 
-      {page !== 'chat' ? <WorkspacePage page={page} result={result} onNode={selectNode} onChat={() => setPage('chat')} /> : <>
+      {page !== 'chat' ? <WorkspacePage page={page} result={result} onNode={selectNode} onSource={selectSource} onChat={() => setPage('chat')}
+        conversations={workspace.archive.conversations} onSaved={(chatId, turnId) => { workspace.select(chatId); workspace.selectTurn(chatId, turnId); setPage('chat'); setMobileInspector(false); }}
+        onAsk={text => { setPage('chat'); setView('chat'); setInput(text); requestAnimationFrame(() => inputRef.current?.focus()); }}
+        onGraph={node => { setPage('chat'); setView('graph'); setTab('graph'); field('trace', null); selectNode(node); }}
+        onTrace={sequence => { setPage('chat'); openTrace(sequence, true); }} /> : <>
       <div className={`workspace-scroll ${!active ? 'home-scroll' : ''}`}><div className={!active ? 'home-stack' : 'conversation-stack'}>
       {otherTurns(chat.turns.slice(0, Math.max(0, turnIndex)))}
-      {!active ? <section className="welcome-content">
+      {!active && view === 'graph' ? <section className="workspace-empty"><h2>Start with an answer</h2><p>Ask a question or open a saved conversation to explore its returned connections. No company-wide graph has been loaded.</p><button className="button" onClick={() => setView('chat')}>Ask a question</button></section> : !active ? <section className="welcome-content">
         <div className="welcome-waves" aria-hidden="true"><svg viewBox="0 0 900 280" preserveAspectRatio="none">{Array.from({ length: 22 }, (_, i) => <path key={i} d={`M-80 ${40 + i * 4} C180 ${-180 + i * 9} 340 ${440 - i * 5} 940 ${-90 + i * 7}`} />)}</svg></div>
         <img className="welcome-mark" src="/weave-knot.svg" alt="Weave" />
-        <h1>{greetingCopy.title}</h1><p className="welcome-subtitle">{greetingCopy.subtitle}</p>
+        {name && <p className="welcome-greeting">{greetingCopy.title}</p>}
+        <h1>Ask Weave about your company</h1><p className="welcome-subtitle">Explore decisions, understand dependencies, find the right people, and assess changes.</p>
         <div className="feature-grid">
-          <button className="feature-card" onClick={() => void submit(PRIMARY_QUESTION)}><span className="feature-icon"><FileText /></span><span><strong>Decision Trace</strong><small>Understand why <br />things happened</small></span><ArrowRight size={19} /></button>
-          <button className="feature-card" onClick={() => void submit(EXPERT_QUESTION)}><span className="feature-icon"><Users /></span><span><strong>Expert Finder</strong><small>See who knows <br />what and why</small></span><ArrowRight size={19} /></button>
-          <button className="feature-card" onClick={() => void submit(IMPACT_QUESTION)}><span className="feature-icon"><GitBranch /></span><span><strong>Impact Analysis</strong><small>Explore what would <br />be affected</small></span><ArrowRight size={19} /></button>
-          <button className="feature-card" onClick={() => void submit(FRESHNESS_QUESTION)}><span className="feature-icon"><History /></span><span><strong>Knowledge Freshness</strong><small>Find information <br />that needs review</small></span><ArrowRight size={19} /></button>
+          <button className="feature-card" onClick={() => void submit(PRIMARY_QUESTION)}><span className="feature-icon"><FileText /></span><span><strong>Why this decision was made</strong><small>Why does Payment Service use Redis?</small></span><ArrowRight size={19} /></button>
+          <button className="feature-card" onClick={() => void submit(EXPERT_QUESTION)}><span className="feature-icon"><Users /></span><span><strong>Who can help</strong><small>Who knows Payment Service?</small></span><ArrowRight size={19} /></button>
+          <button className="feature-card" onClick={() => void submit(IMPACT_QUESTION)}><span className="feature-icon"><GitBranch /></span><span><strong>What could be affected</strong><small>What depends on Payment Service?</small></span><ArrowRight size={19} /></button>
+          <button className="feature-card" onClick={() => void submit(FRESHNESS_QUESTION)}><span className="feature-icon"><History /></span><span><strong>Documents to review</strong><small>Which documents need review?</small></span><ArrowRight size={19} /></button>
         </div>
-        <button className="change-action" onClick={() => void submit(CHANGE_QUESTION)}><GitBranch size={24} /><span><strong>Change Intelligence</strong><small>Review a proposed change through its evidence</small></span><ArrowRight size={19} /></button>
-        <div className="try-label"><span />Try asking<span /></div>
-        <div className="suggestions"><button onClick={() => void submit(SUGGESTIONS[0])}>{SUGGESTIONS[0]}</button><button onClick={() => void submit(PRIMARY_QUESTION)}>Why does Payment Service use Redis?</button></div>
+        <button className="change-action" onClick={() => void submit(CHANGE_QUESTION)}><GitBranch size={24} /><span><strong>Assess a change</strong><small>What happens if we remove Redis from Payment Service?</small></span><ArrowRight size={19} /></button>
       </section> : <section className="conversation" aria-label="Question and answer">
         {view === 'chat' && <div className="question-message"><div>{question}</div><span className="avatar small-avatar">Y</span></div>}
         {impactRequest && <ImpactControls key={`${impactRequest.entity_id}/${impactRequest.max_depth}`} request={impactRequest} disabled={loading} onRun={request => {
@@ -290,14 +293,15 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
         }} />}
         {freshnessRequest && <FreshnessControls key={freshnessRequest.entity} request={freshnessRequest} disabled={loading} onRun={request => void submit(`Which documents about ${request.entity} need review?`, undefined, undefined, request)} />}
         {expertRequest && <ExpertControls key={`${expertRequest.query}/${expertRequest.limit}`} request={expertRequest} disabled={loading} onRun={request => void submit(request.query, undefined, request)} />}
-        {loading && <div className="loading-card" role="status"><img src="/weave-knot.svg" alt="" /><div><strong>Following the evidence…</strong><p>{changeRequest ? 'Building a Change Brief from four independently validated capabilities.' : freshnessRequest ? 'Checking document dates against graph-linked changes.' : expertRequest ? 'Following contribution paths and retrieving their sources.' : impactRequest ? 'Following bounded dependencies and retrieving their sources.' : 'Tracing the decision and retrieving its sources.'}</p><div className="skeleton" /><div className="skeleton short" /></div></div>}
-        {error && <div className="error-card" role="alert"><CircleAlert size={24} /><div><h2>{error.code === 'GRAPH_UNAVAILABLE' ? 'The knowledge graph is not ready' : 'We couldn’t complete this question'}</h2><p>{error.message}</p><button className="button" onClick={() => void submit(question, impactRequest ?? undefined, expertRequest ?? undefined, freshnessRequest ?? undefined)}>Try again <ArrowRight size={15} /></button></div></div>}
+        {loading && <div className="loading-card" role="status"><img src="/weave-knot.svg" alt="" /><div><strong>Following the evidence…</strong><p>Finding relevant sources and connections. Some questions take a little longer.</p><div className="skeleton" /><div className="skeleton short" /></div></div>}
+        {error && <div className="error-card" role="alert"><CircleAlert size={24} /><div><h2>{error.code === 'GRAPH_UNAVAILABLE' ? 'Knowledge graph unavailable' : 'We couldn’t complete this question'}</h2><p>{error.code === 'GRAPH_UNAVAILABLE' ? 'We can’t connect to your company’s knowledge graph right now. Try again later.' : error.code === 'NETWORK_ERROR' ? 'We can’t reach Weave right now. Check your connection and try again.' : error.code === 'INVALID_RESPONSE' ? 'We couldn’t read this answer safely. Try again or ask another question.' : error.message}</p><button className="button" onClick={() => void submit(question, impactRequest ?? undefined, expertRequest ?? undefined, freshnessRequest ?? undefined)}>Try again <ArrowRight size={15} /></button></div></div>}
         {result && <>
           {view === 'chat' && <div className="answer-row"><img className="answer-mark" src="/weave-knot.svg" alt="Weave" /><article className="answer-card">
             <div className="answer-meta"><span className={`support-badge ${result.support_status}`}>
               {result.support_status === 'supported' ? <Check size={13} /> : <CircleAlert size={13} />}{result.support_status.replaceAll('_', ' ')}</span>
-              <span className="small muted">{result.sources.length} sources{fixture ? ' · Demo data' : ''}</span></div>
+              <span className="small muted">{result.sources.length} supporting sources</span></div>
             {isChangeResponse(result) ? <ChangeBrief result={result} onNode={selectNode} onSource={selectSource} onPath={highlightChangeImpact} onEvidence={showChangeEvidence} onTrace={openTrace} onWatch={sequence => openTrace(sequence, true)} /> : isFreshnessResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<FreshnessResults result={result} onNode={selectNode} onSource={selectSource} /></> : isExpertResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ExpertResults result={result} onNode={selectNode} onSource={selectSource} /></> : isImpactResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ImpactResults result={result} onNode={selectNode} onSource={selectSource} onPath={highlightImpact} highlightedId={highlightedFinding} /></> : <AnswerText result={result} onSource={selectSource} />}
+            {!isChangeResponse(result) && result.metadata.generation !== 'openrouter' && (isImpactResponse(result) || isExpertResponse(result) || isFreshnessResponse(result)) && <OriginalAnswer key={turn?.id} result={result} onSource={selectSource} />}
           </article></div>}
           {view === 'graph' && <div className={`graph-toolbar ${traceStep ? 'trace-toolbar' : ''}`}>{!traceStep && <label className="graph-search"><Search size={17} /><input value={graphSearch} onChange={event => setGraphSearch(event.target.value)} placeholder="Find an entity in this evidence graph…" aria-label="Find graph entity" /></label>}<button className="button" onClick={() => { setView('chat'); setGraphSearch(''); }}>Back to answer</button></div>}
           {view === 'graph' && graphSearch && <div className="search-results">{matchedNodes.length ? matchedNodes.map(node => <button className="button" key={node.id} onClick={() => selectNode(node)}><EntityIcon type={node.type} size={16} />{node.label}</button>) : <p>No matching entities in this evidence.</p>}</div>}
@@ -311,7 +315,7 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
             </div>}
 
             <div className="evidence-tabs" role="tablist" aria-label="Evidence views">{([
-              ['graph', Network, 'Evidence graph'], ['timeline', Clock3, 'Timeline'], ['sources', FileText, `Key sources (${result.sources.length})`], ['relationships', List, 'Relationships'],
+              ['graph', Network, 'Connected evidence'], ['timeline', Clock3, 'Timeline'], ['sources', FileText, `Key sources (${result.sources.length})`], ['relationships', List, 'Relationships'],
             ] as const).map(([id, Icon, label]) => <button key={id} role="tab" id={`tab-${id}`} tabIndex={tab === id ? 0 : -1} aria-selected={tab === id} aria-controls={`panel-${id}`} className={tab === id ? 'active' : ''} onClick={() => setTab(id)} onKeyDown={event => {
               const ids: EvidenceTab[] = ['graph', 'timeline', 'sources', 'relationships'];
               const index = ids.indexOf(id);
@@ -337,8 +341,8 @@ export default function App({ repository }: { repository?: ChatRepository } = {}
         </>}
       </section>}
       {otherTurns(chat.turns.slice(turnIndex + 1))}
-      {!active && composer}</div></div>
-      {active && composer}
+      </div></div>
+      {composer}
       </>}
     </main>
     <WorkspacePanel id="details-panel" label="Details panel" modal={narrow && inspectorOpen} hidden={!inspectorOpen} className={`right-panel ${narrow && inspectorOpen ? 'drawer-open' : ''}`}>

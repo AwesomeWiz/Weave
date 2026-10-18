@@ -19,7 +19,7 @@ function Entity({ data, selected }: NodeProps<EntityNode>) {
     if (!data.clock || !data.arriving) return;
     return data.clock.subscribeFrame(progress => { if (ref.current) ref.current.dataset.arrived = progress >= 0.85 ? 'true' : 'false'; });
   }, [data.clock, data.arriving]);
-  const label = data.cinematic ? traceEntityName(entity, entity.id) : entity.label;
+  const label = traceEntityName(entity, entity.id);
   return <div ref={ref} className={`entity-node type-${entity.type.toLowerCase()} ${selected ? 'selected' : ''}`}>
     {[Position.Left, Position.Right, Position.Top, Position.Bottom].map(position => <Handle key={`target-${position}`} id={`target-${position}`} type="target" position={position} />)}
     <span className="entity-icon"><EntityIcon type={entity.type} size={22} /></span>
@@ -31,6 +31,11 @@ function Entity({ data, selected }: NodeProps<EntityNode>) {
 const nodeTypes = { entity: Entity };
 
 const edgeTypes = { default: TraceEdge, detour: TraceDetourEdge };
+
+function FitGraph({ manual }: { manual: { current: boolean } }) {
+  const { fitView } = useReactFlow();
+  return <button className="button small fit-graph" onClick={() => { manual.current = true; void fitView({ padding: 0.2 }); }}>Fit graph</button>;
+}
 
 function InitialFit({ visible, fitNodeIds, graphKey, clock, manual }: { visible: boolean; fitNodeIds: string[]; graphKey: string; clock?: TraceClock | null; manual: { current: boolean } }) {
   const initialized = useNodesInitialized({ includeHiddenNodes: true });
@@ -157,7 +162,7 @@ export default function EvidenceGraph({ graph, onSelect, selectedId, highlighted
         style: { opacity: traceNodeIds.length ? traceNodeIds.includes(node.id) ? 1 : 0.55 : selectedId ? (!neighbors.has(node.id) ? 0.75 : 1) : emphasizedNodeIds.length && !emphasizedNodeIds.includes(node.id) ? 0.65 : 1 } })),
       edges: edges.map(edge => {
         const connected = highlightedEdgeIds.length ? highlightedEdgeIds.includes(edge.id) : edge.source === selectedId || edge.target === selectedId;
-        return { ...edge, label: trace ? traceRelationshipLabel(String(edge.label)) : edge.label,
+        return { ...edge, label: traceRelationshipLabel(String(edge.label)),
           data: { clock: clock ?? undefined, active: current?.edge_id === edge.id, reverse: current?.edge_id === edge.id && current.traversal_from === edge.target },
           className: trace ? connected ? 'trace-edge-active' : completed.has(edge.id) ? 'trace-edge-completed' : 'trace-edge-future' : '',
           style: { ...edge.style, stroke: connected ? '#315d48' : '#7b9181', strokeWidth: connected ? 2.4 : completed.has(edge.id) ? 2 : 1.3, opacity: trace ? connected ? 1 : completed.has(edge.id) ? 0.65 : 0.3 : selectedId && !connected ? 0.55 : 1 },
@@ -179,6 +184,7 @@ export default function EvidenceGraph({ graph, onSelect, selectedId, highlighted
       onNodeClick={(_event, node) => inspect(node.data.entity)}>
       <InitialFit visible={visible} fitNodeIds={fitNodeIds} graphKey={graph.nodes.map(n => n.id).join('|')} clock={clock} manual={manual} />
       <Background color="#dce4da" gap={22} size={1} />
+      {!trace && <FitGraph manual={manual} />}
       <Controls showInteractive={false} onZoomIn={() => { manual.current = true; }} onZoomOut={() => { manual.current = true; }} onFitView={() => { manual.current = true; }} />
       {expanded && !trace && <MiniMap pannable zoomable nodeColor="#cedbcd" />}
     </ReactFlow>
