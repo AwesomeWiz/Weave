@@ -1,43 +1,65 @@
-# Weave — Shared Project Context Pack
+# Weave documentation
 
-Current implementation: [repository setup](../README.md), [Phase 1 contract](PHASE1_IMPLEMENTATION.md), [Phase 1 verification](PHASE1_VERIFICATION.md), and [Phase 2 Impact Analysis handoff](PHASE2_IMPACT_HANDOFF.md). Both teammate graph and source packages are integrated; offline checks pass. Successful live FalkorDB verification remains required on this machine.
+Start with the [project README](../README.md) for the product, actual graph model, canonical walkthrough and local quick start. The current application includes four graph capabilities, Change Intelligence, cinematic Trace Mode, evidence inspection and browser-local conversations.
 
-Latest backend foundation: [Phase 3 Change Intelligence](PHASE3_CHANGE_BACKEND_HANDOFF.md), including the structured Change Brief API, four-tool composition, safeguards, and verification.
+## Run and evaluate
 
-Phase 3 presentation: [React Change Brief](PHASE3_CHANGE_FRONTEND_HANDOFF.md) and [grounded OpenRouter integration](PHASE3_CHANGE_OPENROUTER_HANDOFF.md), including the finite presentation contract, offline checks, and Arnold's pending live FalkorDB acceptance plan.
+- [Detailed run guide](RUNNING.md): PowerShell and POSIX commands, graph/source configuration, authenticated ingestion, offline checks and opt-in live gates.
+- [Screenshot assets and provenance](assets/README.md): repository-visible sample UI captures; no live database/provider acceptance is implied.
+- [Submission checklist](10_SUBMISSION_CHECKLIST.md): requirements to verify before submitting. Checkboxes are a checklist, not a claim that submission or deployment is complete.
 
-Latest Phase 3 integration: [Antony's ordered Decision Trace paths](PHASE3_ORDERED_PATH_INTEGRATION_HANDOFF.md), including the verified merged commit, historical path API, tool-local provenance checks, UI highlighting and pending combined live QA.
+## Implementation and verification
 
-Phase 2 integration: [Knowledge Freshness](PHASE2_FRESHNESS_HANDOFF.md), including four-tool routing and provenance validation. See the Phase 2 QA report for its subsequent live acceptance.
+Read handoffs as revision-specific records. Their statements about unfinished future stages may have been superseded by later phases. The current source code and root run guide define the release setup.
 
-Orchestration background: [Multi-tool routing and Context Builder V2](PHASE2_MULTITOOL_HANDOFF.md), including the unchanged query response contract and graph-tool extension instructions.
+| Area | Documentation |
+| --- | --- |
+| Phase 4 product workspace | [Product redesign](PHASE4C_PRODUCT_REDESIGN_HANDOFF.md) |
+| Trace playback and motion | [Trace Mode contracts](PHASE4B_TRACE_MODE_HANDOFF.md), [cinematic presentation](PHASE4B1_CINEMATIC_TRACE_HANDOFF.md) |
+| Saved conversations | [IndexedDB workspace](PHASE4A_CHAT_WORKSPACE_HANDOFF.md) |
+| Change Intelligence | [Backend and structured contract](PHASE3_CHANGE_BACKEND_HANDOFF.md), [React integration](PHASE3_CHANGE_FRONTEND_HANDOFF.md) |
+| Ordered historical paths | [Decision Trace integration and provenance](PHASE3_ORDERED_PATH_INTEGRATION_HANDOFF.md) |
+| Constrained hosted presentation | [Phase 3 Change synthesis](PHASE3_CHANGE_OPENROUTER_HANDOFF.md), [Phase 2 OpenRouter](PHASE2_OPENROUTER_HANDOFF.md) |
+| Four-tool routing | [Context Builder V2 and multi-tool orchestration](PHASE2_MULTITOOL_HANDOFF.md) |
+| Capabilities | [Impact Analysis](PHASE2_IMPACT_HANDOFF.md), [Expert Finder](PHASE2_EXPERT_FINDER_HANDOFF.md), [Knowledge Freshness](PHASE2_FRESHNESS_HANDOFF.md) |
+| Earlier live acceptance | [Phase 2 QA report](PHASE2_QA_REPORT.md), scoped to its recorded code and dataset revisions |
+| Initial integration | [Real graph/source boundary](REAL_INTEGRATION_HANDOFF.md), [Phase 1 implementation](PHASE1_IMPLEMENTATION.md), [Phase 1 verification](PHASE1_VERIFICATION.md) |
+| Earlier UI work | [UI refinement verification](UI_REFINEMENT_VERIFICATION.md), [design reference](design.md) |
 
-This folder is the recommended context pack for the shared ChatGPT Project **Weave — FalkorDB Graph Hacks**.
+Phase 4C records 370 passing frontend tests. Phase 4B records 686 passing Python tests with 11 opt-in live tests skipped. Earlier Phase 2 live acceptance is documented separately. These records do not establish final combined Phase 3/4 live FalkorDB or hosted-provider acceptance; repeat the appropriate gates on the release environment.
 
-> **Important:** These are pre-hackathon planning/reference notes. The official rules currently state that the main coding and design work must begin after the hackathon starts. Use these files to align on the idea and constraints; confirm/refine the implementation during the official build window.
+Some historical handoffs link ignored `.local` QA artifacts that are available only on the original workstation. The root README uses the public-review assets under [`docs/assets`](assets/README.md) instead.
 
-## Upload order
+## Data and graph source of truth
 
-1. `00_PROJECT_CONTEXT.md` — master summary and source-of-truth rules
-2. `01_HACKATHON_BRIEF.md` — current official rules, schedule, and compliance notes
-3. `02_WEAVE_PRD.md` — product scope and requirements
-4. `03_ARCHITECTURE.md` — proposed hackathon architecture
-5. `04_KNOWLEDGE_GRAPH.md` — ontology, relationships, and graph-native features
-6. `05_AI_GRAPHRAG_PIPELINE.md` — retrieval, tools, prompting, and grounding
-7. `06_TEAM_PLAN.md` — suggested four-person ownership and build gates
-8. `07_DEMO_PLAN.md` — NovaPay demo narrative and golden questions
-9. `08_API_DESIGN.md` — proposed frontend/backend contracts
-10. `09_DATASET_INGESTION.md` — synthetic dataset and ingestion plan
-11. `10_SUBMISSION_CHECKLIST.md` — final delivery and QA checklist
+| Resource | Purpose |
+| --- | --- |
+| [NovaPay corpus](../data/novapay) | Approved synthetic source records and documents |
+| [Record models](../weave_data/models.py) | Canonical entity and chunk schemas |
+| [Relationship mapping](../weave_data/relationships.py) | Actual stored relationship directions |
+| [Chunk generation](../weave_data/chunks.py) | Source IDs, text and provenance metadata |
+| [Ingestion](../weave_data/ingest.py) | Validation/preparation and explicit persistence |
+| [Graph adapter](../weave_data/graph_adapter.py) | Idempotent FalkorDB writes and persisted chunk retrieval |
+| [Source interface](../weave_data/retrieval.py) | Exact-source retrieval seam; the backend supplies the real graph adapter |
+| [Graph queries](../app/graph) | Decision Trace, Impact, Expert and Freshness queries |
+| [Compatibility namespace](../weave_graph/__init__.py) | Keeps graph imports separate from the backend `app` package |
+| [API models](../backend/app/models.py) | Actual endpoint schemas and evidence bounds |
 
-## Recommended ChatGPT Project instruction
+Earlier workstream contracts remain useful background: [ingestion contract](ingestion-contract.md), [graph handoff](handoff-antony.md), [AI integration handoff](handoff-abhishikth.md) and [frontend/demo handoff](handoff-arnold.md). Where their illustrative diagrams or planned interfaces differ from implemented code, use the actual mapping and current root README.
 
-Use the uploaded Weave documents as the shared source of truth. Prefer the hackathon brief for external constraints, the PRD for product scope, and the knowledge-graph document for ontology. Do not silently reintroduce the old EKOS Neo4j + ChromaDB architecture. Optimize decisions for a small, reliable Company Brain demo in which FalkorDB performs essential graph reasoning. When proposing implementation changes, call out which context document should be updated.
+## Planning and organizer context
 
-## Before the event
+These documents retain the original project context and plans; they are not claims that every proposed feature shipped:
 
-Use the pack for team alignment, research, questions, and planning. Re-check the official hackathon pages just before the event in case rules or schedule change.
+- [Master context](00_PROJECT_CONTEXT.md)
+- [Hackathon brief and official references](01_HACKATHON_BRIEF.md)
+- [Product requirements](02_WEAVE_PRD.md)
+- [Architecture proposal](03_ARCHITECTURE.md)
+- [Graph ontology proposal](04_KNOWLEDGE_GRAPH.md)
+- [GraphRAG pipeline proposal](05_AI_GRAPHRAG_PIPELINE.md)
+- [Team/workstream plan](06_TEAM_PLAN.md)
+- [Demo plan](07_DEMO_PLAN.md)
+- [API proposal](08_API_DESIGN.md)
+- [Dataset plan](09_DATASET_INGESTION.md)
 
-## During the event
-
-Create the actual implementation repository after the official start, then update these documents to reflect what the team really builds. The submitted README and Cypher documentation should describe the working implementation, not merely this pre-event proposal.
+Reconfirm external organizer rules and submission requirements before final submission. No public deployment, demo-video URL or submission confirmation is asserted by this index.
