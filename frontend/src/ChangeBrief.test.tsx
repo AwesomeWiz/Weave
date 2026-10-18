@@ -31,6 +31,37 @@ async function openBrief() {
 }
 
 describe('structured Change Brief in the existing workspace', () => {
+  it('surfaces a hosted overview with working citations and unchanged structured sections', async () => {
+    const hosted = structuredClone(changeFixture);
+    hosted.metadata.generation = 'openrouter';
+    hosted.answer = 'INFERRED RISK: Removing Redis may reintroduce latency pressure; this is not a benchmark. [issue:PAY-42]\n\nRecommended validation has not been performed.';
+    vi.mocked(analyzeChange).mockResolvedValue(hosted);
+    const user = await openBrief();
+    const overview = screen.getByRole('region', { name: 'Grounded overview' });
+    expect(overview).toHaveTextContent(hosted.answer.split(' [')[0]);
+    expect(overview).toHaveTextContent('The structured evidence below remains authoritative.');
+    expect(within(overview).queryByRole('region', { name: 'Relevant Reviewers' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: 'Relevant Reviewers' })).toHaveLength(1);
+    expect(screen.getByRole('region', { name: 'Relevant Reviewers' })).toHaveTextContent('Score 16');
+    expect(screen.getByRole('region', { name: 'Documents to Review if Change Proceeds' })).toHaveTextContent('If this change is approved and implemented');
+    await user.click(within(overview).getByRole('button', { name: 'issue:PAY-42' }));
+    expect(screen.getByLabelText('Source inspector')).toHaveTextContent('PAY-42');
+    expect(analyzeChange).toHaveBeenCalledTimes(1); expect(askQuestion).not.toHaveBeenCalled();
+    expect(hosted.data).toEqual(changeFixture.data); expect(hosted.graph).toEqual(changeFixture.graph);
+    expect(hosted.sources).toEqual(changeFixture.sources);
+  });
+  it('keeps deterministic fallback warnings visible without duplicating the brief narrative', async () => {
+    const fallback = structuredClone(changeFixture);
+    const warning = 'OpenRouter synthesis unavailable or rejected; showing the deterministic evidence summary.';
+    fallback.metadata.warnings.push(warning);
+    vi.mocked(analyzeChange).mockResolvedValue(fallback);
+    await openBrief();
+    expect(screen.queryByRole('region', { name: 'Grounded overview' })).not.toBeInTheDocument();
+    expect(screen.getByText(warning)).toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: 'Historical Context' })).toHaveLength(1);
+    expect(screen.getByRole('region', { name: 'Known Facts and Potential Risks' })).toHaveTextContent('INFERRED RISK');
+    expect(analyzeChange).toHaveBeenCalledTimes(1);
+  });
   it('routes the canonical chat question through exactly one structured request', async () => {
     const user = userEvent.setup(); render(<App />);
     await user.click(screen.getByRole('textbox', { name: 'Ask about your company knowledge' }));

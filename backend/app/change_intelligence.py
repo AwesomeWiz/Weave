@@ -1,13 +1,15 @@
 """Deterministic workflow over Phase 2's independently validated capabilities.
 
-No graph discovery, source retrieval, or hosted generation is implemented here.
+Graph discovery/retrieval stay in existing capabilities; presentation is optional.
 """
 import re
 import time
+from collections.abc import Awaitable, Callable
 
 from pydantic import ValidationError
 
 from .citations import validate_citations
+from .change_synthesis import prepare_change_synthesis
 from .context_v2 import CombinedContext
 from .graph import GraphContractError, GraphGateway
 from .models import (
@@ -18,6 +20,7 @@ from .models import (
 )
 from .orchestration import execute_plan
 from .router import IMPACT_ALIASES, RoutingPlan, ToolCall
+from .synthesis import SynthesisPacket
 
 SERVICE = "service:payment-service"
 TECHNOLOGY = "tech:redis"
@@ -261,7 +264,8 @@ def _render(data: ChangeBriefData, status: str) -> str:
     return "\n\n".join(line.strip() for line in lines)
 
 
-async def analyze_change(request: ChangeInput | str, gateway: GraphGateway, graph_mode: str) -> ChangeResponse:
+async def analyze_change(request: ChangeInput | str, gateway: GraphGateway, graph_mode: str, *,
+                         select_presentation: Callable[[SynthesisPacket], Awaitable[dict]] | None = None) -> ChangeResponse:
     started = time.perf_counter()
     proposed, supported = _proposal(request)
     if not supported:
@@ -284,7 +288,18 @@ async def analyze_change(request: ChangeInput | str, gateway: GraphGateway, grap
     warnings = list(data.limitations)
     if graph_mode == "fixture":
         warnings.insert(0, "Development fixture — synthetic evidence, not live FalkorDB data.")
-    return ChangeResponse(answer=answer, support_status=context.status, tools_used=tools,
+    response = ChangeResponse(answer=answer, support_status=context.status, tools_used=tools,
                           sources=context.sources, graph=context.graph, data=data,
                           metadata=Metadata(latency_ms=round((time.perf_counter() - started) * 1000),
                                             graph_mode=graph_mode, generation="deterministic", warnings=warnings))
+    if select_presentation is not None and context.status != "insufficient_evidence" and proposed.resolution == "resolved":
+        try:
+            packet = prepare_change_synthesis(data, context)
+            # Only a finite selection plan can cross back from the provider.
+            # It never receives mutable response/data/context objects.
+            response.answer = packet.render(await select_presentation(packet))
+            response.metadata.generation = "openrouter"
+        except Exception:
+            response.metadata.warnings.append("OpenRouter synthesis unavailable or rejected; showing the deterministic evidence summary.")
+    response.metadata.latency_ms = round((time.perf_counter() - started) * 1000)
+    return response

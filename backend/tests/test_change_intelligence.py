@@ -241,7 +241,7 @@ def test_conflicts_and_context_size_fail_closed(freshness_db, monkeypatch, damag
 
 
 @pytest.mark.parametrize("provider_name", ["none", "openrouter", "ollama"])
-def test_change_is_deterministic_and_never_calls_provider(freshness_db, provider_name):
+def test_change_without_finite_provider_protocol_remains_deterministic(freshness_db, provider_name):
     class NoProviderCalls:
         async def generate(self, *_):
             pytest.fail("Change Intelligence attempted hosted synthesis")
@@ -252,6 +252,8 @@ def test_change_is_deterministic_and_never_calls_provider(freshness_db, provider
     first = client.post("/api/change-intelligence", json=REQUEST).json()
     second = client.post("/api/change-intelligence", json=REQUEST).json()
     assert first["metadata"]["generation"] == "deterministic"
+    if provider_name == "openrouter":
+        assert "OpenRouter synthesis unavailable or rejected" in first["metadata"]["warnings"][-1]
     for field in ("answer", "data", "graph", "sources", "support_status"):
         assert first[field] == second[field]
 

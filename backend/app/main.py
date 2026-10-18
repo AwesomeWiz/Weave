@@ -170,15 +170,22 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
     async def freshness(request: FreshnessInput):
         return await run_freshness(request)
 
+    async def run_change(request: ChangeInput | str):
+        async def select(packet):
+            # Providers without the finite Change protocol fail closed. The old
+            # Phase 2 generate interface is intentionally unchanged.
+            return await llm.select_change(packet)
+        return await analyze_change(request, graph, config.graph_mode,
+                                    select_presentation=select if config.llm_provider == "openrouter" else None)
+
     @app.post("/api/change-intelligence", response_model=ChangeResponse)
     async def change_intelligence(request: ChangeInput):
-        # Stage 1 is deterministic even when a hosted provider is configured.
-        return await analyze_change(request, graph, config.graph_mode)
+        return await run_change(request)
 
     @app.post("/api/query", response_model=QueryResponse)
     async def query(request: QueryRequest):
         if is_change_question(request.question):
-            response = await analyze_change(request.question, graph, config.graph_mode)
+            response = await run_change(request.question)
             return QueryResponse.model_validate(response.model_dump(exclude={"data"}))
         start = time.perf_counter()
         metadata = Metadata(latency_ms=0, graph_mode=config.graph_mode)

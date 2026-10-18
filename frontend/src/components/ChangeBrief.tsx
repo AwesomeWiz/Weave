@@ -64,6 +64,10 @@ export default function ChangeBrief({ result, onNode, onSource, onPath, onEviden
   return <div className="change-brief">
     <header className="change-brief-header"><p className="eyebrow">Change Intelligence</p><h2>Change Brief</h2>
       <p className="muted">A proposal review assembled from retrieved evidence. No change or validation has been performed.</p></header>
+    {result.metadata.generation === 'openrouter' && <section className="change-section" aria-label="Grounded overview">
+      <h3>Grounded overview</h3><p className="small muted">Hosted selection of validated statements. The structured evidence below remains authoritative.</p>
+      <div className="change-narrative">{narrative(result.answer)}</div>
+    </section>}
     <nav className="change-contents" aria-label="Change Brief sections">{sectionNames.map((name, i) => <a href={`#change-section-${i}`} key={name}>{name}</a>)}</nav>
 
     <section id="change-section-0" className="change-section" aria-label={sectionNames[0]}><h3>01 <span>Proposed Change</span></h3>
