@@ -19,6 +19,8 @@ def wait_for_owned_graph(client, expected_pid, *, timeout=60):
                 graphs = client.execute_command("GRAPH.LIST")
                 if graphs:
                     raise ValueError("Refusing an existing graph")
+                print("Render demo: owned FalkorDB GRAPH.LIST succeeded; module loaded; empty graph confirmed",
+                      flush=True)
                 return
         except (RedisConnectionError, RedisTimeoutError):
             pass

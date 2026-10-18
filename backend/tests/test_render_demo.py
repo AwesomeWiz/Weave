@@ -38,13 +38,65 @@ def test_local_real_mode_and_single_worker_commands():
     assert cmd[cmd.index("--maxmemory-policy") + 1] == "noeviction"
     assert cmd[cmd.index("--save") + 1] == ""
     assert cmd[cmd.index("--appendonly") + 1] == "no"
-    assert cmd[cmd.index("BOLT_PORT") + 1] == "-1"
+    assert "BOLT_PORT" not in cmd  # Not a recognized v4.22.0 configuration field.
     assert not any("flush" in arg.lower() or "reset" in arg.lower() for arg in cmd)
     api = start.api_command(env["PORT"])
     assert api[api.index("--workers") + 1] == "1"
     assert api[api.index("--host") + 1] == "0.0.0.0"
     assert api[api.index("--port") + 1] == "10001"
     assert api[api.index("--app-dir") + 1] == "backend"
+
+
+def test_module_options_match_audited_v4220_parser_and_preserve_timeout_bounds():
+    # Config_Contains_field / Config_Option_set in upstream v4.22.0,
+    # commit e070d806e0ce967d74e1c3b891997b5b830cce43:
+    # src/configuration/config.c. BOLT_PORT is absent and Config_Init rejects it.
+    cmd = start.redis_command("/tmp/owned-demo")
+    args = cmd[cmd.index("--loadmodule") + 2:]
+    assert len(args) % 2 == 0
+    options = dict(zip(args[::2], args[1::2]))
+    assert len(options) * 2 == len(args)  # No duplicate or overwritten options.
+    assert options == {
+        "THREAD_COUNT": "1", "OMP_THREAD_COUNT": "1", "NODE_CREATION_BUFFER": "128",
+        "CACHE_SIZE": "10", "MAX_QUEUED_QUERIES": "8", "QUERY_MEM_CAPACITY": "33554432",
+        "TIMEOUT_DEFAULT": "5000", "TIMEOUT_MAX": "10000",
+    }
+    assert "TIMEOUT" not in options  # v4.22.0 rejects mixing old/new timeout settings.
+    assert 0 < int(options["TIMEOUT_DEFAULT"]) <= int(options["TIMEOUT_MAX"])
+
+
+@pytest.mark.parametrize("code,phase,before,after,expected", [
+    (1, "before_api", 0, 0, "exit_code=1 cgroup_oom_kill_delta=0"),
+    (-9, "api_runtime", 2, 3, "signal=9 cgroup_oom_kill_delta=1"),
+    (-9, "before_api", None, None, "signal=9 cgroup_oom_kill_delta=unavailable"),
+])
+def test_exit_diagnostics_separate_phase_signal_and_oom_evidence(monkeypatch, capsys, code, phase,
+                                                               before, after, expected):
+    monkeypatch.setattr(start, "oom_kill_count", lambda: after)
+    start.report_process_exit("FalkorDB", SimpleNamespace(poll=lambda: code), phase, before)
+    output = capsys.readouterr().err
+    assert f"phase={phase}" in output and expected in output
+    assert "signal alone does not establish OOM" in output
+
+
+@pytest.mark.parametrize("content,expected", [
+    ("low 0\nhigh 0\nmax 4\noom 1\noom_kill 1\n", 1),
+    ("low 0\n", None), ("oom_kill invalid\n", None), (None, None),
+])
+def test_optional_oom_counter_is_safe_when_missing_or_invalid(monkeypatch, content, expected):
+    def read(_path):
+        if content is None:
+            raise FileNotFoundError()
+        return content
+    monkeypatch.setattr(start.Path, "read_text", read)
+    assert start.oom_kill_count() == expected
+
+
+def test_module_load_marker_requires_owned_graph_command_success(capsys):
+    probe = SimpleNamespace(ping=lambda: True, info=lambda _: {"process_id": 100},
+                            execute_command=lambda _: [])
+    seed.wait_for_owned_graph(probe, 100)
+    assert "module loaded; empty graph confirmed" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("key,value", [
@@ -65,7 +117,7 @@ def test_unsafe_or_external_configuration_fails_closed(key, value):
 
 
 @pytest.mark.parametrize("failure", ["pid", "graphs", "module"])
-def test_readiness_refuses_foreign_process_existing_graph_and_plain_redis(failure):
+def test_readiness_refuses_foreign_process_existing_graph_and_plain_redis(failure, capsys):
     probe = SimpleNamespace(ping=lambda: True,
                             info=lambda _: {"process_id": 99 if failure == "pid" else 100})
     def command(_):
@@ -75,6 +127,7 @@ def test_readiness_refuses_foreign_process_existing_graph_and_plain_redis(failur
     probe.execute_command = command
     with pytest.raises((ValueError, ResponseError)):
         seed.wait_for_owned_graph(probe, 100)
+    assert "module loaded" not in capsys.readouterr().out
 
 
 def test_readiness_retries_connection_only_and_has_a_deadline(monkeypatch):
@@ -174,7 +227,7 @@ def test_bootstrap_uses_real_adapter_boundary_and_closes_it(monkeypatch):
 
 
 @pytest.mark.parametrize("phase", ["seed_failure", "db_failure", "bootstrap_timeout", "api_exit", "db_exit", "signal"])
-def test_supervisor_startup_runtime_failure_and_shutdown(monkeypatch, phase):
+def test_supervisor_startup_runtime_failure_and_shutdown(monkeypatch, phase, capsys):
     children, commands, stopped = [], [], []
     db_checks = []
     class Process:
@@ -183,6 +236,7 @@ def test_supervisor_startup_runtime_failure_and_shutdown(monkeypatch, phase):
             self.pid = 100 + self.kind
             self.returncode = None
             assert kwargs["start_new_session"] is True
+            assert kwargs.get("stdout") is None and kwargs.get("stderr") is None
             children.append(self)
             commands.append(command)
 
@@ -206,13 +260,18 @@ def test_supervisor_startup_runtime_failure_and_shutdown(monkeypatch, phase):
         monkeypatch.setattr(start.time, "monotonic", lambda: next(ticks))
     def stopping():
         return phase == "signal" and len(children) == 3
+    env = start.runtime_environment(environment(OPENROUTER_API_KEY="test-only-diagnostic-secret"))
     if phase == "signal":
-        assert start.supervise(start.runtime_environment(environment()), "/tmp/owned-demo", stopping) == 0
+        assert start.supervise(env, "/tmp/owned-demo", stopping) == 0
     else:
         with pytest.raises(RuntimeError):
-            start.supervise(start.runtime_environment(environment()), "/tmp/owned-demo", stopping)
+            start.supervise(env, "/tmp/owned-demo", stopping)
     assert stopped == children
     assert len(children) == (3 if phase in {"api_exit", "db_exit", "signal"} else 2)
+    output = capsys.readouterr()
+    assert "FalkorDB v4.22.0 module arguments:" in output.out
+    assert "BOLT_PORT" not in output.out
+    assert "test-only-diagnostic-secret" not in output.out + output.err
 
 
 def test_cleanup_signals_owned_children_and_escalates_after_deadline(monkeypatch):

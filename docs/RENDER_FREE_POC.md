@@ -1,10 +1,24 @@
 # Render Free: one-container FalkorDB + FastAPI experiment
 
-**Verdict: technically plausible, runtime feasibility unverified.** This is a disposable synthetic demo experiment, not a production hosting recommendation or a successful deployment report. No Docker/container execution or Render deployment occurred on this Windows machine. Peak RAM, CPU behavior, Linux image compatibility and public evidence acceptance must be measured in an approved live trial.
+**Verdict: technically plausible, runtime feasibility unverified.** This is a disposable synthetic demo experiment, not a production hosting recommendation or a successful deployment report. The first user-reported Render trial built successfully and started Redis 8.10.2, but FalkorDB module initialization failed before ingestion/FastAPI. The targeted configuration correction below has not been redeployed. Docker remains unavailable locally; peak RAM, CPU behavior and public evidence acceptance still require a live trial.
 
 Phase 5 is preserved in merged `main` at `e71eb29f7cf445a317b19396da63bda59cea9d60`. This implementation is isolated on `feature/render-free-poc`, initially at that same HEAD. It changes no API, UI, graph tools, grounding or teammate ingestion code. Both stashes and five original screenshots remain untouched. Nothing was committed, pushed or deployed automatically.
 
 The [Railway + Vercel + Cloud runbook](DEPLOYMENT_RUNBOOK.md) remains the separate hosted-database option. Do not copy its external Cloud settings into this local-only experiment.
+
+## Targeted v4.22.0 startup correction
+
+The deployed command included `BOLT_PORT -1`. An audit of the exact upstream `v4.22.0` tag, commit `e070d806e0ce967d74e1c3b891997b5b830cce43`, found no `BOLT_PORT` in `Config_Contains_field` or the configuration enum. `Config_Init` rejects unknown fields with `REDISMODULE_ERR`. This is a verified configuration defect sufficient to abort module loading; the general documentation's Bolt default must not be copied into this version's argument list. [Versioned configuration parser](https://github.com/FalkorDB/FalkorDB/blob/e070d806e0ce967d74e1c3b891997b5b830cce43/src/configuration/config.c#L574), [unknown-field rejection](https://github.com/FalkorDB/FalkorDB/blob/e070d806e0ce967d74e1c3b891997b5b830cce43/src/configuration/config.c#L975), [configuration enum](https://github.com/FalkorDB/FalkorDB/blob/e070d806e0ce967d74e1c3b891997b5b830cce43/src/configuration/config.h#L25).
+
+Only that unsupported pair was removed. All remaining options are recognized by the audited parser: `THREAD_COUNT=1`, `OMP_THREAD_COUNT=1`, `NODE_CREATION_BUFFER=128`, `CACHE_SIZE=10`, `MAX_QUEUED_QUERIES=8`, `QUERY_MEM_CAPACITY=33554432`, `TIMEOUT_DEFAULT=5000`, `TIMEOUT_MAX=10000`. Their numeric values satisfy the setters; default timeout is below maximum, and legacy `TIMEOUT` is not mixed in. No memory limits, image versions, UID, or evidence checks were changed. A local static comparison of original/corrected commands against the exact parser found unsupported fields `['BOLT_PORT']` before and none after.
+
+The official server image recipe uses `redis:8.10.2` itself. Its entrypoint invokes Redis with `--loadmodule <path> <module arguments>`, as this supervisor does. The custom launch intentionally retains loopback/protected mode, a fresh writable temporary directory and supervised lifetime instead of adopting the official wrapper's broader binding defaults. There is no evidence justifying a Redis downgrade or root-user workaround. [Versioned server Dockerfile](https://github.com/FalkorDB/FalkorDB/blob/e070d806e0ce967d74e1c3b891997b5b830cce43/build/docker/Dockerfile.server#L7), [official launch mechanism](https://github.com/FalkorDB/FalkorDB/blob/e070d806e0ce967d74e1c3b891997b5b830cce43/build/docker/run.sh#L25).
+
+The provided logs reach the module's startup banner, consistent with successful module-library loading and the Redis minimum-version gate; configuration initialization follows that banner before thread-pool completion. They do not establish an OOM kill. Filesystem permissions or resource allocation could cause a later, independent failure after the invalid argument is removed; no such additional cause is claimed yet. [Module initialization order](https://github.com/FalkorDB/FalkorDB/blob/e070d806e0ce967d74e1c3b891997b5b830cce43/src/module.c#L195).
+
+For the next approved trial, diagnostics print only the fixed, non-secret module arguments. Native Redis stdout/stderr are inherited unchanged. A success marker requires `GRAPH.LIST` on the owned PID plus an empty graph. Child exit diagnostics distinguish `before_api` from `api_runtime`, normal exit codes from terminating signals, and optionally report a cgroup-v2 `oom_kill` counter delta. Missing counters mean unavailable evidence; signal 9 alone is not an OOM diagnosis, and a cgroup event does not by itself identify which process was killed. A whole-container kill may prevent any supervisor diagnostic; retain Render platform events/metrics.
+
+Another manual Render Free trial is justified to test the corrected argument list. Success still requires module load, exact bootstrap verification, real-backed API acceptance and resource measurements. No automatic redeploy is authorized or performed by this fix.
 
 ## Feasibility and strict cost boundary
 
@@ -27,7 +41,7 @@ The Dockerfile-specific `.dockerignore` uses an allowlist: runtime packages, loc
 The default image command runs `start.py` under `tini`:
 
 1. Require `WEAVE_DEMO_BOOTSTRAP=novapay-disposable-v1`. Reject external hosts, non-demo graph names, alternate factories/source backends, fixture mode, credentials, TLS-to-an-external-service settings and any LLM provider other than `none` before spawning children. Require explicit HTTPS CORS origins.
-2. Create a new private temporary directory for this boot. Start a genuine Redis/FalkorDB child with a direct argument list, bound **only to `127.0.0.1:6379`**. No database or Bolt public listener, no browser. API is the only listener bound to all interfaces.
+2. Create a new private temporary directory for this boot. Start a genuine Redis/FalkorDB child with a direct argument list, bound **only to `127.0.0.1:6379`**. No public database binding or browser. API is the only listener bound to all interfaces; no unsupported Bolt configuration is supplied.
 3. In a short-lived bootstrap child, poll with bounded connection attempts and a 60-second readiness deadline. Verify Redis's reported PID matches the newly spawned child, then require `GRAPH.LIST` to succeed and return no graphs. Plain Redis, a foreign process, an existing graph or a missing module fails closed. Do not seed an existing server merely because PING succeeds.
 4. Validate the approved dataset: 20 entities, 6 chunks, 44 relationships and 29 aliases, no errors. Use existing `run_ingestion()` with an explicit local `FalkorDBGraphAdapter` to create `novapay`. Nothing clears/deletes/resets a graph.
 5. Read back exact 26 entity/chunk IDs, 6 Chunk nodes, all 44 directed edges, accepted D-007, and all source text/chunk IDs through the actual adapter-backed `find_sources()`. Missing/reversed/extra evidence or altered source text prevents the API from starting.
@@ -45,7 +59,7 @@ Persistence files (RDB/AOF) are disabled and the working directory is new on eve
 | Initial graph matrix buffer / cache | `NODE_CREATION_BUFFER=128`, `CACHE_SIZE=10` |
 | Query queue / per-query memory | `MAX_QUEUED_QUERIES=8`, `QUERY_MEM_CAPACITY=33554432` (32 MiB) |
 | Graph query timeouts | Default 5 seconds, maximum 10 seconds; existing client/gateway timeouts retained |
-| Redis clients / Bolt | Maximum 32 clients; Bolt disabled |
+| Redis clients | Maximum 32 clients; no unsupported `BOLT_PORT` argument |
 | API | One worker, concurrency limit 4, backlog 16, graceful shutdown 8 seconds |
 | Allocator | `MALLOC_ARENA_MAX=2`; no extra services or monitoring daemon |
 
@@ -105,7 +119,7 @@ Keep frontend on Vercel, same `frontend` root/build/shared-asset settings as the
 
 1. Confirm Free plan and $0/no-overage account policy before building. Record SHA, resolved image digest, Python version and build duration; all Docker build checks must pass.
 2. Inspect boot logs for genuine graph module startup, exact successful seed/readback message, and one API worker. Record cold-start duration until detailed health succeeds. Any bootstrap rejection or restart loop fails the trial.
-3. Public `/api/health` must return 200 with `graph_mode=falkordb`, `graph=novapay`, database connected, tool available and `llm=disabled`. `/healthz` alone is insufficient. Public port is API only; inspect configured bind flags/boot logs for loopback Redis and disabled Bolt.
+3. Public `/api/health` must return 200 with `graph_mode=falkordb`, `graph=novapay`, database connected, tool available and `llm=disabled`. `/healthz` alone is insufficient. Public port is API only; inspect configured bind flags/boot logs for loopback Redis and no additional database listeners.
 4. Run the [canonical API checks and all 20 browser acceptance checks](DEPLOYMENT_RUNBOOK.md#health-and-api-smoke-tests), substituting the Render public origin for Railway. Verify the genuine PAY-42, payment-perf-7, 8fae2 and ADR-7 chunks and accepted D-007. Test all four tools, structured Change, ordered playback, citations, Inspector and saved-chat restore without another analysis POST. Preserve historical tool-local path proof and exact stored edge directions.
 5. Required architecture path: D-007 IMPLEMENTED_BY 8fae2 CHANGES Payment USES Redis. Dependencies: Checkout DEPENDS_ON Payment, Order DEPENDS_ON Checkout. Missing proof is failure; no fabricated bridging edges.
 6. Record Render's **combined** memory and CPU metrics at bootstrap, idle, primary query, all-four-tool Change, repeated single-user queries and an idle/wake cycle. Watch for OOM/restart logs, cap/queue errors, failed health probes, timeouts and sustained CPU throttling. Use platform logs/metrics available on the free account; if necessary memory evidence is unavailable, leave the memory verdict unverified. Free plan has no interactive shell; do not rely on SSH or paid one-off jobs.
@@ -131,7 +145,7 @@ $env:WEAVE_SOURCE_BACKEND = 'delegate'
 git diff --check
 ```
 
-Results on Windows/Python 3.11.9:
+Initial preparation results on Windows/Python 3.11.9 (before the targeted startup correction):
 
 | Check | Result |
 | --- | --- |
@@ -142,4 +156,6 @@ Results on Windows/Python 3.11.9:
 | Dataset preparation | 20 entities, 6 chunks, 44 relationships, 29 aliases, zero validation errors |
 | Docs / whitespace | Markdown references/fences/tables, PowerShell example syntax and whitespace checked |
 
-Docker is unavailable locally, so Docker build/runtime, native signal delivery, actual Redis module loading, memory and Render acceptance remain unverified. No frontend source changed; frontend test/build repetition is not required by this scoped task. All live trial checks above remain pending; no new external LLM calls were made.
+Targeted correction verification: **48 Render tests passed**, including rejection-regression checks for the removed argument, unchanged timeout/resource settings, module-load marker gating, native-output inheritance, secret-free diagnostics and exit/OOM-evidence classification. Deployment-script Ruff and the focused test file's Ruff checks passed. No shared application code changed, so the full historical suite was not rerun for this correction.
+
+Docker is unavailable locally, so the corrected Docker build/runtime, native signal delivery, successful Redis module loading, memory and Render API acceptance remain unverified. The earlier failed live trial is recorded above. No frontend source changed; frontend test/build repetition is not required by this scoped task. All successful live acceptance checks remain pending; no new external LLM calls were made.

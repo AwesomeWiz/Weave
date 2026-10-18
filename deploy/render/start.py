@@ -60,8 +60,32 @@ def redis_command(directory):
         "--loadmodule", MODULE, "THREAD_COUNT", "1", "OMP_THREAD_COUNT", "1",
         "NODE_CREATION_BUFFER", "128", "CACHE_SIZE", "10", "MAX_QUEUED_QUERIES", "8",
         "QUERY_MEM_CAPACITY", "33554432", "TIMEOUT_DEFAULT", "5000", "TIMEOUT_MAX", "10000",
-        "BOLT_PORT", "-1",
     ]
+
+
+def oom_kill_count():
+    """Optional cgroup-v2 evidence; unavailable counters do not imply no OOM."""
+    try:
+        for line in Path("/sys/fs/cgroup/memory.events").read_text().splitlines():
+            key, value = line.split()
+            if key == "oom_kill":
+                return int(value)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def report_process_exit(name, child, phase, oom_before):
+    code = child.poll()
+    if code is None:
+        return
+    oom_after = oom_kill_count()
+    delta = (str(oom_after - oom_before) if oom_before is not None and oom_after is not None
+             else "unavailable")
+    result = f"signal={-code}" if code < 0 else f"exit_code={code}"
+    print(f"Render demo: {name} stopped phase={phase} {result} cgroup_oom_kill_delta={delta}. "
+          "A signal alone does not establish OOM; retain native Redis output and platform events.",
+          file=sys.stderr, flush=True)
 
 
 def api_command(port):
@@ -91,7 +115,13 @@ def supervise(env, directory, stopping):
     try:
         if stopping():
             return 0
-        db = subprocess.Popen(redis_command(directory), cwd=ROOT, env=env, start_new_session=True)
+        oom_before = oom_kill_count()
+        command = redis_command(directory)
+        # Only fixed, non-secret module options; never print env, credentials or source data.
+        print("Render demo: FalkorDB v4.22.0 module arguments: "
+              + " ".join(command[command.index("--loadmodule") + 2:]), flush=True)
+        # Inherit stdout/stderr unchanged so native module errors remain visible.
+        db = subprocess.Popen(command, cwd=ROOT, env=env, start_new_session=True)
         children.append(db)
         seed = subprocess.Popen([sys.executable, "deploy/render/bootstrap.py", str(db.pid)],
                                 cwd=ROOT, env=env, start_new_session=True)
@@ -101,17 +131,22 @@ def supervise(env, directory, stopping):
             if stopping():
                 return 0
             if db.poll() is not None or time.monotonic() >= deadline:
+                report_process_exit("FalkorDB", db, "before_api", oom_before)
                 raise RuntimeError("Local graph/bootstrap did not become ready")
             time.sleep(0.2)
         if stopping():
             return 0
         if seed.returncode != 0 or db.poll() is not None:
+            report_process_exit("FalkorDB", db, "before_api", oom_before)
+            report_process_exit("bootstrap", seed, "before_api", oom_before)
             raise RuntimeError("Local graph/bootstrap failed")
         api = subprocess.Popen(api_command(env["PORT"]), cwd=ROOT, env=env, start_new_session=True)
         children.append(api)
         print("Render demo: real local graph seeded; starting one API worker", flush=True)
         while not stopping():
             if db.poll() is not None or api.poll() is not None:
+                report_process_exit("FalkorDB", db, "api_runtime", oom_before)
+                report_process_exit("API", api, "api_runtime", oom_before)
                 raise RuntimeError("A required demo process stopped")
             time.sleep(0.2)
         return 0
