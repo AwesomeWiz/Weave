@@ -54,11 +54,27 @@ class TraceInput(BaseModel):
     technology: str
 
 
+class TracePathStep(BaseModel):
+    """One stored directed relationship in an ordered Decision Trace path."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+
+
+class TraceRelationshipPath(BaseModel):
+    """A named, ordered path returned by the graph trace tool."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(min_length=1, max_length=128)
+    steps: list[TracePathStep] = Field(min_length=1, max_length=10)
+
+
 class TraceResult(BaseModel):
     """Team integration contract; source IDs are resolved independently."""
     graph: EvidenceGraph = Field(default_factory=EvidenceGraph)
     source_ids: list[str] = Field(default_factory=list)
     decision_ids: list[str] = Field(default_factory=list)
+    relationship_paths: list[TraceRelationshipPath] = Field(default_factory=list, max_length=80)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -282,3 +298,96 @@ class FreshnessResult(BaseModel):
 
 class FreshnessResponse(QueryResponse):
     data: FreshnessData
+
+
+class ChangeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    target: str = Field(min_length=1, max_length=256)
+    change: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("target", "change")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Target and change must not be blank")
+        return value.strip()
+
+
+class ChangeTarget(BaseModel):
+    requested_target: str | None
+    requested_change: str
+    intent: Literal["remove_technology", "unsupported"]
+    resolution: Literal["resolved", "unsupported", "unresolved", "ambiguous", "inconsistent"]
+    service: GraphNode | None = None
+    technology: GraphNode | None = None
+    limitation: str | None = None
+
+
+class ChangeEvidenceReference(BaseModel):
+    tool: Literal["decision_trace", "impact_analysis", "find_expert", "find_stale_knowledge"]
+    node_ids: list[str] = Field(default_factory=list, max_length=80)
+    edge_ids: list[str] = Field(default_factory=list, max_length=200)
+    source_ids: list[str] = Field(default_factory=list, max_length=30)
+    relationship_paths: list[list[str]] = Field(default_factory=list, max_length=200)
+
+
+class ChangeHistoricalContext(BaseModel):
+    support_status: SupportStatus = "insufficient_evidence"
+    summary: str = "No validated historical rationale was retrieved."
+    decision_ids: list[str] = Field(default_factory=list, max_length=30)
+    evidence: ChangeEvidenceReference | None = None
+    relationship_paths: list[TraceRelationshipPath] = Field(default_factory=list, max_length=80)
+
+
+class ChangeImpact(ImpactData):
+    support_status: SupportStatus = "insufficient_evidence"
+    max_depth: int = Field(default=3, ge=1, le=3)
+
+
+class ChangeReviewer(ExpertRanking):
+    """Unchanged validated ranking, never an inferred individual owner."""
+
+
+class ChangeRisk(BaseModel):
+    classification: Literal["KNOWN_FACT", "INFERRED_RISK", "RECOMMENDATION"]
+    description: str
+    evidence: list[ChangeEvidenceReference] = Field(min_length=1, max_length=4)
+    uncertainty: str
+    affected_entity_ids: list[str] = Field(default_factory=list, max_length=80)
+
+
+class ChangeValidationStep(BaseModel):
+    classification: Literal["RECOMMENDATION"] = "RECOMMENDATION"
+    description: str
+    evidence: list[ChangeEvidenceReference] = Field(min_length=1, max_length=4)
+    performed: Literal[False] = False
+
+
+class ChangeDocumentReview(BaseModel):
+    document: GraphNode
+    condition: Literal["if_change_approved_and_implemented"] = "if_change_approved_and_implemented"
+    reason: str
+    evidence: list[ChangeEvidenceReference] = Field(min_length=1, max_length=4)
+
+
+class ChangeToolSupport(BaseModel):
+    support_status: SupportStatus
+    state: Literal["validated", "unavailable", "invalid", "unregistered"]
+    evidence: ChangeEvidenceReference
+
+
+class ChangeBriefData(BaseModel):
+    proposed_change: ChangeTarget
+    historical_context: ChangeHistoricalContext = Field(default_factory=ChangeHistoricalContext)
+    impact: ChangeImpact = Field(default_factory=ChangeImpact)
+    reviewers: list[ChangeReviewer] = Field(default_factory=list, max_length=10)
+    risks: list[ChangeRisk] = Field(default_factory=list, max_length=30)
+    validation_steps: list[ChangeValidationStep] = Field(default_factory=list, max_length=30)
+    current_freshness_findings: list[FreshnessFinding] = Field(default_factory=list, max_length=50)
+    documents_to_review_if_change_proceeds: list[ChangeDocumentReview] = Field(default_factory=list, max_length=50)
+    tool_support: dict[str, ChangeToolSupport] = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ChangeResponse(QueryResponse):
+    data: ChangeBriefData

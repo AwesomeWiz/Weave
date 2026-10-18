@@ -62,3 +62,44 @@ export interface FreshnessFinding {
 export interface FreshnessResponse extends QueryResponse {
   data: { entity: GraphNode | null; review_candidates: FreshnessFinding[] };
 }
+
+export interface ChangeInput { target: string; change: string }
+export type ChangeTool = 'decision_trace' | 'impact_analysis' | 'find_expert' | 'find_stale_knowledge';
+export interface ChangeEvidenceReference {
+  tool: ChangeTool; node_ids: string[]; edge_ids: string[]; source_ids: string[]; relationship_paths: string[][];
+}
+export interface ChangeTarget {
+  requested_target: string | null; requested_change: string; intent: 'remove_technology' | 'unsupported';
+  resolution: 'resolved' | 'unsupported' | 'unresolved' | 'ambiguous' | 'inconsistent';
+  service: GraphNode | null; technology: GraphNode | null; limitation: string | null;
+}
+export interface ChangeHistoricalContext {
+  support_status: SupportStatus; summary: string; decision_ids: string[]; evidence: ChangeEvidenceReference | null;
+  /** Optional for compatibility with earlier dedicated endpoint responses. */
+  relationship_paths?: TraceRelationshipPath[];
+}
+export interface TracePathStep { source: string; type: string; target: string }
+export interface TraceRelationshipPath { id: string; steps: TracePathStep[] }
+export type ChangeImpact = ImpactResponse['data'] & {
+  support_status: SupportStatus; max_depth: number;
+}
+export interface ChangeRisk {
+  classification: 'KNOWN_FACT' | 'INFERRED_RISK' | 'RECOMMENDATION'; description: string;
+  evidence: ChangeEvidenceReference[]; uncertainty: string; affected_entity_ids: string[];
+}
+export interface ChangeValidationStep {
+  classification: 'RECOMMENDATION'; description: string; evidence: ChangeEvidenceReference[]; performed: false;
+}
+export interface ChangeDocumentReview {
+  document: GraphNode; condition: 'if_change_approved_and_implemented'; reason: string; evidence: ChangeEvidenceReference[];
+}
+export interface ChangeToolSupport {
+  support_status: SupportStatus; state: 'validated' | 'unavailable' | 'invalid' | 'unregistered'; evidence: ChangeEvidenceReference;
+}
+export interface ChangeBriefData {
+  proposed_change: ChangeTarget; historical_context: ChangeHistoricalContext; impact: ChangeImpact;
+  reviewers: ExpertRanking[]; risks: ChangeRisk[]; validation_steps: ChangeValidationStep[];
+  current_freshness_findings: FreshnessFinding[]; documents_to_review_if_change_proceeds: ChangeDocumentReview[];
+  tool_support: Partial<Record<ChangeTool, ChangeToolSupport>>; limitations: string[];
+}
+export interface ChangeResponse extends QueryResponse { data: ChangeBriefData }

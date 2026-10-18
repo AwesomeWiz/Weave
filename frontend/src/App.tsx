@@ -1,8 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowRight, ArrowUp, BookOpen, Box, Building2, Check, CircleAlert, Clock3, FileText, GitBranch, History, List, LoaderCircle, Maximize2, MessageSquare, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Plug, Plus, Search, Users, X } from 'lucide-react';
-import { analyzeImpact, ApiError, askQuestion, checkFreshness, findExperts, getHealth } from './api';
-import type { ExpertInput, FreshnessInput, GraphNode, Health, ImpactFinding, ImpactInput, QueryResponse, Source } from './types';
+import { analyzeImpact, ApiError, askQuestion, analyzeChange, checkFreshness, findExperts, getHealth } from './api';
+import type { ChangeEvidenceReference, ChangeInput, ExpertInput, FreshnessInput, GraphNode, Health, ImpactFinding, ImpactInput, QueryResponse, Source } from './types';
+import ChangeBrief from './components/ChangeBrief';
+import { CHANGE_QUESTION, changeGraphFocus, isChangeResponse, routeChangeQuestion } from './change';
 import FreshnessResults, { FreshnessControls } from './components/FreshnessResults';
 import { FRESHNESS_QUESTION, isFreshnessResponse, routeFreshnessQuestion } from './freshness';
 import ExpertResults, { ExpertControls } from './components/ExpertResults';
@@ -20,7 +22,7 @@ const EvidenceGraph = lazy(() => import('./components/EvidenceGraph'));
 const SUGGESTIONS = ['Why was Redis introduced?', 'What evidence supports the Redis decision?', 'Why was Redis chosen for Payment Service?'];
 type EvidenceTab = 'graph' | 'timeline' | 'sources' | 'relationships';
 type View = 'chat' | 'graph';
-type HistoryEntry = { question: string; result: QueryResponse; impactRequest: ImpactInput | null; expertRequest: ExpertInput | null; freshnessRequest: FreshnessInput | null };
+type HistoryEntry = { question: string; result: QueryResponse; impactRequest: ImpactInput | null; expertRequest: ExpertInput | null; freshnessRequest: FreshnessInput | null; changeRequest: ChangeInput | null };
 
 function AnswerText({ result, onSource }: { result: QueryResponse; onSource: (source: Source) => void }) {
   const sources = new Map(result.sources.map(s => [s.id, s]));
@@ -40,6 +42,10 @@ export default function App() {
   const [impactRequest, setImpactRequest] = useState<ImpactInput | null>(null);
   const [expertRequest, setExpertRequest] = useState<ExpertInput | null>(null);
   const [freshnessRequest, setFreshnessRequest] = useState<FreshnessInput | null>(null);
+  const [changeRequest, setChangeRequest] = useState<ChangeInput | null>(null);
+  const [graphScope, setGraphScope] = useState<'focused' | 'all'>('focused');
+  const changeFocus = useMemo(() => result && isChangeResponse(result) ? changeGraphFocus(result) : null, [result]);
+  const displayedGraph = changeFocus && graphScope === 'focused' ? changeFocus.graph : result?.graph;
   const [highlightedPath, setHighlightedPath] = useState<string[]>([]);
   const [highlightedFinding, setHighlightedFinding] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -102,21 +108,22 @@ export default function App() {
     if (!text || inFlight.current) return;
     inFlight.current = true;
     setLoading(true); setQuestion(text); setInput(text); setResult(null); setError(null);
-    setView('chat'); clearSelection(); setTab('graph');
-    const freshness = impactOverride || expertOverride ? null : freshnessOverride ?? routeFreshnessQuestion(text);
-    const expert = impactOverride || freshness ? null : expertOverride ?? routeExpertQuestion(text);
-    const impact = expert || freshness ? null : impactOverride ?? routeImpactQuestion(text);
-    setImpactRequest(impact); setExpertRequest(expert); setFreshnessRequest(freshness);
+    setView('chat'); clearSelection(); setTab('graph'); setGraphScope('focused');
+    const change = impactOverride || expertOverride || freshnessOverride ? null : routeChangeQuestion(text);
+    const freshness = change || impactOverride || expertOverride ? null : freshnessOverride ?? routeFreshnessQuestion(text);
+    const expert = change || impactOverride || freshness ? null : expertOverride ?? routeExpertQuestion(text);
+    const impact = change || expert || freshness ? null : impactOverride ?? routeImpactQuestion(text);
+    setImpactRequest(impact); setExpertRequest(expert); setFreshnessRequest(freshness); setChangeRequest(change);
     try {
-      const response = freshness ? await checkFreshness(freshness) : expert ? await findExperts(expert) : impact ? await analyzeImpact(impact) : await askQuestion(text);
+      const response = change ? await analyzeChange(change) : freshness ? await checkFreshness(freshness) : expert ? await findExperts(expert) : impact ? await analyzeImpact(impact) : await askQuestion(text);
       setResult(response); setInput('');
-      setHistory(previous => [{ question: text, result: response, impactRequest: impact, expertRequest: expert, freshnessRequest: freshness }, ...previous.filter(h => h.question !== text)].slice(0, 6));
+      setHistory(previous => [{ question: text, result: response, impactRequest: impact, expertRequest: expert, freshnessRequest: freshness, changeRequest: change }, ...previous.filter(h => h.question !== text)].slice(0, 6));
     } catch (cause) { setError(cause instanceof ApiError ? cause : new ApiError('Something went wrong. Please retry.')); }
     finally { inFlight.current = false; setLoading(false); refreshHealth(); }
   }
   function newChat() {
     if (loading) return;
-    setResult(null); setQuestion(''); setInput(''); setError(null); setView('chat'); setImpactRequest(null); setExpertRequest(null); setFreshnessRequest(null); clearSelection();
+    setResult(null); setQuestion(''); setInput(''); setError(null); setView('chat'); setImpactRequest(null); setExpertRequest(null); setFreshnessRequest(null); setChangeRequest(null); setGraphScope('focused'); clearSelection();
     inputRef.current?.focus();
   }
   function onSubmit(event: FormEvent) { event.preventDefault(); void submit(input); }
@@ -129,6 +136,15 @@ export default function App() {
     setHighlightedFinding(finding.service_id);
     setHighlightedPath(result?.graph.edges.filter(e => finding.path_edges.some(p => p.source === e.source && p.type === e.type && p.target === e.target)).map(e => e.id) ?? []);
     setTab('graph');
+  }
+  function showChangeEvidence(ref: ChangeEvidenceReference) {
+    setHighlightedPath(ref.edge_ids); setTab('graph'); setView('graph');
+    setGraphScope('all'); setSelectedNode(null); setMobileInspector(false);
+  }
+  function highlightChangeImpact(finding: ImpactFinding) {
+    setHighlightedFinding(finding.service_id);
+    setHighlightedPath(result?.graph.edges.filter(e => finding.path_edges.some(p => p.source === e.source && p.type === e.type && p.target === e.target)).map(e => e.id) ?? []);
+    setTab('graph'); setView('graph'); setSelectedNode(null); setMobileInspector(false);
   }
   const matchedNodes = result?.graph.nodes.filter(n => `${n.label} ${n.id} ${n.type}`.toLowerCase().includes(graphSearch.toLowerCase())) ?? [];
   const inspectorOpen = narrow ? mobileInspector : !rightCollapsed;
@@ -160,7 +176,7 @@ export default function App() {
       <div className="sidebar-section"><p className="section-label">Workspace</p><div className="workspace-row"><Building2 size={21} />NovaPay<span className="tiny-tag">{fixture ? 'Demo' : 'Local'}</span></div></div>
       {history.length > 0 && <div className="sidebar-section history-section"><div className="panel-heading"><p className="section-label">Recent questions</p><button className="icon-button" disabled={loading} aria-label="New question" onClick={newChat}><Plus size={16} /></button></div>
         {history.map(entry => <button key={entry.question} className={`history-item ${question === entry.question ? 'active' : ''}`} disabled={loading} onClick={() => {
-          setQuestion(entry.question); setResult(entry.result); setImpactRequest(entry.impactRequest); setExpertRequest(entry.expertRequest); setFreshnessRequest(entry.freshnessRequest); setError(null); setView('chat'); setInput(''); clearSelection();
+          setQuestion(entry.question); setResult(entry.result); setImpactRequest(entry.impactRequest); setExpertRequest(entry.expertRequest); setFreshnessRequest(entry.freshnessRequest); setChangeRequest(entry.changeRequest); setGraphScope('focused'); setError(null); setView('chat'); setInput(''); clearSelection();
         }}><Clock3 size={17} /><span>{entry.question}<small>This session</small></span></button>)}
       </div>}
       <div className="sidebar-footer"><button className="icon-button" aria-label="Personalize greeting" title="Personalize greeting" aria-expanded={editingName} aria-controls="name-preference" onClick={() => { setNameDraft(name); setEditingName(!editingName); setLeftCollapsed(false); if (narrow) setMobileNav(true); }}><Pencil size={18} /></button><div className="profile-copy"><strong>{name || 'Local workspace'}</strong><small>Personalize your greeting</small></div></div>
@@ -190,6 +206,7 @@ export default function App() {
           <button className="feature-card" onClick={() => void submit(IMPACT_QUESTION)}><span className="feature-icon"><GitBranch /></span><span><strong>Impact Analysis</strong><small>Explore what would <br />be affected</small></span><ArrowRight size={19} /></button>
           <button className="feature-card" onClick={() => void submit(FRESHNESS_QUESTION)}><span className="feature-icon"><History /></span><span><strong>Knowledge Freshness</strong><small>Find information <br />that needs review</small></span><ArrowRight size={19} /></button>
         </div>
+        <button className="change-action" onClick={() => void submit(CHANGE_QUESTION)}><GitBranch size={24} /><span><strong>Change Intelligence</strong><small>Review a proposed change through its evidence</small></span><ArrowRight size={19} /></button>
         <div className="try-label"><span />Try asking<span /></div>
         <div className="suggestions"><button onClick={() => void submit(SUGGESTIONS[0])}>{SUGGESTIONS[0]}</button><button onClick={() => void submit(PRIMARY_QUESTION)}>Why does Payment Service use Redis?</button></div>
       </section> : <section className="conversation" aria-label="Question and answer">
@@ -200,18 +217,24 @@ export default function App() {
         }} />}
         {freshnessRequest && <FreshnessControls key={freshnessRequest.entity} request={freshnessRequest} disabled={loading} onRun={request => void submit(`Which documents about ${request.entity} need review?`, undefined, undefined, request)} />}
         {expertRequest && <ExpertControls key={`${expertRequest.query}/${expertRequest.limit}`} request={expertRequest} disabled={loading} onRun={request => void submit(request.query, undefined, request)} />}
-        {loading && <div className="loading-card" role="status"><img src="/weave-knot.svg" alt="" /><div><strong>Following the evidence…</strong><p>{freshnessRequest ? 'Checking document dates against graph-linked changes.' : expertRequest ? 'Following contribution paths and retrieving their sources.' : impactRequest ? 'Following bounded dependencies and retrieving their sources.' : 'Tracing the decision and retrieving its sources.'}</p><div className="skeleton" /><div className="skeleton short" /></div></div>}
+        {loading && <div className="loading-card" role="status"><img src="/weave-knot.svg" alt="" /><div><strong>Following the evidence…</strong><p>{changeRequest ? 'Building a Change Brief from four independently validated capabilities.' : freshnessRequest ? 'Checking document dates against graph-linked changes.' : expertRequest ? 'Following contribution paths and retrieving their sources.' : impactRequest ? 'Following bounded dependencies and retrieving their sources.' : 'Tracing the decision and retrieving its sources.'}</p><div className="skeleton" /><div className="skeleton short" /></div></div>}
         {error && <div className="error-card" role="alert"><CircleAlert size={24} /><div><h2>{error.code === 'GRAPH_UNAVAILABLE' ? 'The knowledge graph is not ready' : 'We couldn’t complete this question'}</h2><p>{error.message}</p><button className="button" onClick={() => void submit(question, impactRequest ?? undefined, expertRequest ?? undefined, freshnessRequest ?? undefined)}>Try again <ArrowRight size={15} /></button></div></div>}
         {result && <>
           {view === 'chat' && <div className="answer-row"><img className="answer-mark" src="/weave-knot.svg" alt="Weave" /><article className="answer-card">
             <div className="answer-meta"><span className={`support-badge ${result.support_status}`}>
               {result.support_status === 'supported' ? <Check size={13} /> : <CircleAlert size={13} />}{result.support_status.replaceAll('_', ' ')}</span>
               <span className="small muted">{result.sources.length} sources{fixture ? ' · Demo data' : ''}</span></div>
-            {isFreshnessResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<FreshnessResults result={result} onNode={selectNode} onSource={selectSource} /></> : isExpertResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ExpertResults result={result} onNode={selectNode} onSource={selectSource} /></> : isImpactResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ImpactResults result={result} onNode={selectNode} onSource={selectSource} onPath={highlightImpact} highlightedId={highlightedFinding} /></> : <AnswerText result={result} onSource={selectSource} />}
+            {isChangeResponse(result) ? <ChangeBrief result={result} onNode={selectNode} onSource={selectSource} onPath={highlightChangeImpact} onEvidence={showChangeEvidence} /> : isFreshnessResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<FreshnessResults result={result} onNode={selectNode} onSource={selectSource} /></> : isExpertResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ExpertResults result={result} onNode={selectNode} onSource={selectSource} /></> : isImpactResponse(result) ? <>{result.metadata.generation === 'openrouter' && <AnswerText result={result} onSource={selectSource} />}<ImpactResults result={result} onNode={selectNode} onSource={selectSource} onPath={highlightImpact} highlightedId={highlightedFinding} /></> : <AnswerText result={result} onSource={selectSource} />}
           </article></div>}
           {view === 'graph' && <div className="graph-toolbar"><label className="graph-search"><Search size={17} /><input value={graphSearch} onChange={event => setGraphSearch(event.target.value)} placeholder="Find an entity in this evidence graph…" aria-label="Find graph entity" /></label><button className="button" onClick={() => { setView('chat'); setGraphSearch(''); }}>Back to answer</button></div>}
           {view === 'graph' && graphSearch && <div className="search-results">{matchedNodes.length ? matchedNodes.map(node => <button className="button" key={node.id} onClick={() => selectNode(node)}><EntityIcon type={node.type} size={16} />{node.label}</button>) : <p>No matching entities in this evidence.</p>}</div>}
           <section className="evidence-card">
+            {changeFocus && graphAvailable && <div className="change-graph-controls" aria-label="Change evidence graph scope">
+              <span className="small muted">Focused on the change and its returned evidence. Stored directions are preserved.</span>
+              <button className="button small" aria-pressed={graphScope === 'focused'} onClick={() => setGraphScope('focused')}>Change focus</button>
+              <button className="button small" aria-pressed={graphScope === 'all'} onClick={() => setGraphScope('all')}>All returned evidence</button>
+            </div>}
+
             <div className="evidence-tabs" role="tablist" aria-label="Evidence views">{([
               ['graph', Network, 'Evidence graph'], ['timeline', Clock3, 'Timeline'], ['sources', FileText, `Key sources (${result.sources.length})`], ['relationships', List, 'Relationships'],
             ] as const).map(([id, Icon, label]) => <button key={id} role="tab" id={`tab-${id}`} tabIndex={tab === id ? 0 : -1} aria-selected={tab === id} aria-controls={`panel-${id}`} className={tab === id ? 'active' : ''} onClick={() => setTab(id)} onKeyDown={event => {
@@ -221,7 +244,7 @@ export default function App() {
               if (next) { event.preventDefault(); setTab(next); document.getElementById(`tab-${next}`)?.focus({ preventScroll: true }); }
             }}><Icon size={17} />{label}</button>)}</div>
             <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-              <div hidden={tab !== 'graph'}><Suspense fallback={<div className="graph-empty" role="status">Loading evidence graph…</div>}><EvidenceGraph graph={result.graph} onSelect={selectNode} selectedId={selectedNode?.id} highlightedEdgeIds={highlightedPath} expanded={view === 'graph'} visible={tab === 'graph'} /></Suspense></div>
+              <div hidden={tab !== 'graph'}><Suspense fallback={<div className="graph-empty" role="status">Loading evidence graph…</div>}><EvidenceGraph graph={displayedGraph ?? result.graph} onSelect={selectNode} selectedId={selectedNode?.id} highlightedEdgeIds={highlightedPath.length ? highlightedPath : selectedNode ? undefined : changeFocus?.primaryEdgeIds} emphasizedNodeIds={changeFocus?.primaryNodeIds} fitNodeIds={graphScope === 'focused' ? changeFocus?.primaryNodeIds : undefined} expanded={view === 'graph'} visible={tab === 'graph'} /></Suspense></div>
               {tab === 'timeline' && <div className="timeline">{result.sources.length ? [...result.sources].sort((a, b) => timestampOrder(a.timestamp) - timestampOrder(b.timestamp)).map(source =>
                 <button className="timeline-event" key={source.id} onClick={() => selectSource(source)}><span className={`round-icon type-${source.type.toLowerCase()}`}><EntityIcon type={source.type} /></span><span><small>{dateLabel(source.timestamp)}</small><strong>{source.title}</strong><p>{source.snippet}</p></span></button>) : <p>No dated sources are available.</p>}</div>}
               {tab === 'sources' && <div className="source-list">{result.sources.length ? result.sources.map(source => <SourceRow source={source} key={source.id} onClick={() => selectSource(source)} />) : <p>No source records were returned.</p>}</div>}
@@ -231,7 +254,7 @@ export default function App() {
             </div>
           </section>
           {view === 'chat' && graphAvailable && <div className="answer-actions"><button className="button primary" onClick={() => { setView('graph'); setTab('graph'); }}><Maximize2 size={16} />Explore in graph<ArrowRight size={16} /></button><button className="button" onClick={() => setTab('sources')}><BookOpen size={17} />Inspect sources</button><button className="button" onClick={newChat}><Plus size={17} />New question</button></div>}
-          {result.metadata.warnings.filter(w => !w.startsWith('Development fixture')).map(warning => <p key={warning} className="evidence-warning"><CircleAlert size={15} />{warning}</p>)}
+          {result.metadata.warnings.filter(w => !w.startsWith('Development fixture') && (!isChangeResponse(result) || !result.data.limitations.includes(w))).map(warning => <p key={warning} className="evidence-warning"><CircleAlert size={15} />{warning}</p>)}
         </>}
       </section>}
       {!active && composer}</div></div>

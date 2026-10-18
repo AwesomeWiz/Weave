@@ -12,6 +12,8 @@ from app.context import build_context
 from app.graph import FalkorGateway, FixtureGateway, GraphContractError
 from app.main import create_app
 from app.models import TraceInput
+from app.orchestration import _trace
+from app.context_v2 import merge_contexts
 from weave_data.graph_adapter import InMemoryGraphAdapter
 from weave_data.ingest import prepare_ingestion, run_ingestion
 from weave_graph.trace import trace_decision
@@ -37,6 +39,11 @@ def merged_database(monkeypatch):
             calls.append(kwargs)
 
         def execute(self, query, params):
+            def relationship(edge):
+                return SimpleNamespace(
+                    properties=edge.properties or {}, relation=edge.rel_type
+                )
+
             if "RETURN d, s, t" in query:
                 assert params == {"service_id": "service:payment-service", "technology_id": "tech:redis"}
                 rows = [(nodes["decision:D-007"], nodes[params["service_id"]], nodes[params["technology_id"]])]
@@ -45,13 +52,32 @@ def merged_database(monkeypatch):
                         if e.source_id == params["decision_id"] and e.rel_type in {
                             "SUPPORTED_BY", "IMPLEMENTED_BY", "DOCUMENTED_IN"}]
             elif "RETURN s, r, t" in query:
-                rows = [(nodes[e.source_id], SimpleNamespace(properties=e.properties or {}), nodes[e.target_id])
+                rows = [(nodes[e.source_id], relationship(e), nodes[e.target_id])
                         for e in edges if e.rel_type == "USES" and e.source_id == params["service_id"]
                         and e.target_id == params["technology_id"]]
             elif "RETURN i, r, issue" in query:
-                rows = [(nodes[e.source_id], SimpleNamespace(properties=e.properties or {}), nodes[e.target_id])
-                        for e in edges if e.rel_type == "LED_TO" and e.source_id == params["incident_id"]
-                        and e.target_id == params["issue_id"]]
+                supported = {e.target_id for e in edges if e.source_id == params["decision_id"]
+                             and e.rel_type == "SUPPORTED_BY"}
+                rows = [(nodes[e.source_id], relationship(e), nodes[e.target_id])
+                        for e in edges if e.rel_type == "LED_TO" and e.target_id in supported]
+            elif "RETURN d, implemented, commit, changes" in query:
+                rows = []
+                for implemented in edges:
+                    if (implemented.source_id != params["decision_id"]
+                            or implemented.rel_type != "IMPLEMENTED_BY"):
+                        continue
+                    commit_id = implemented.target_id
+                    for changes in edges:
+                        if (changes.source_id != commit_id or changes.rel_type != "CHANGES"
+                                or changes.target_id != params["service_id"]):
+                            continue
+                        for uses in edges:
+                            if (uses.source_id == params["service_id"] and uses.rel_type == "USES"
+                                    and uses.target_id == params["technology_id"]):
+                                rows.append((nodes[params["decision_id"]], relationship(implemented),
+                                             nodes[commit_id], relationship(changes),
+                                             nodes[params["service_id"]], relationship(uses),
+                                             nodes[params["technology_id"]]))
             else:
                 assert "RETURN c, type(r), source.id" in query
                 rows = [(SimpleNamespace(properties=c.model_dump(mode="json")),
@@ -94,6 +120,18 @@ def test_actual_trace_normalization_and_canonical_inputs(merged_database, query)
     signatures = {(e.source, e.type, e.target) for e in trace.graph.edges}
     assert ("service:payment-service", "USES", "tech:redis") in signatures
     assert ("incident:INC-17", "LED_TO", "issue:PAY-42") in signatures
+    paths = {path.id: path.steps for path in trace.relationship_paths}
+    assert paths["decision_to_documentation"][0].model_dump() == {
+        "source": "decision:D-007", "type": "DOCUMENTED_IN", "target": "doc:ADR-7"
+    }
+    assert paths["decision_to_current_architecture"][-1].model_dump() == {
+        "source": "service:payment-service", "type": "USES", "target": "tech:redis"
+    }
+    for steps in paths.values():
+        assert all(
+            (step.source, step.type, step.target) in signatures for step in steps
+        )
+        assert all(left.target == right.source for left, right in zip(steps, steps[1:]))
     assert trace.warnings == []
     assert len(calls) == len(closed) == 1
 
@@ -135,6 +173,9 @@ def test_retrieved_message_path_can_ground_rationale_without_issue_path(merged_d
     sources = asyncio.run(gateway.find_sources(trace.source_ids))
     trace.graph.edges = [e for e in trace.graph.edges
                          if not (e.type == "SUPPORTED_BY" and e.target == "issue:PAY-42")]
+    # Simulate a coherent reduced tool result, not an intentionally stale path.
+    trace.relationship_paths = [p for p in trace.relationship_paths
+                                if not any(s.type == "SUPPORTED_BY" and s.target == "issue:PAY-42" for s in p.steps)]
     context = build_context(trace, sources, TARGET)
     assert context.status == "supported" and context.can_explain
     assert "[message:payment-perf-7]" in context.summary
@@ -147,6 +188,7 @@ def test_actual_pipeline_cannot_ground_rationale_without_retrieved_path(merged_d
     sources = asyncio.run(gateway.find_sources(trace.source_ids))
     kinds = {"SUPPORTED_BY"} if missing == "decision_support" else {"FROM_ISSUE", "FROM_MESSAGE"}
     trace.graph.edges = [e for e in trace.graph.edges if e.type not in kinds]
+    trace.relationship_paths = [p for p in trace.relationship_paths if not any(s.type in kinds for s in p.steps)]
     context = build_context(trace, sources, TARGET)
     assert context.status == "partially_supported" and not context.can_explain
 
@@ -208,7 +250,8 @@ def test_invalid_actual_tool_payload_is_a_contract_error(merged_database, damage
     if damage == "status":
         payload["data"]["decision_status"] = "accepted-but-not-real"
     elif damage == "decision":
-        payload["nodes"][0]["properties"] = {"status": "proposed"}
+        next(node for node in payload["nodes"]
+             if node["id"] == "decision:D-007")["properties"] = {"status": "proposed"}
     elif damage == "source":
         payload["sources"][0]["id"] = None
     else:
@@ -238,18 +281,64 @@ def test_factory_reuses_actual_client_health_and_closes_it(merged_database):
     assert len(calls) == len(closed) == 1
 
 
-@pytest.mark.parametrize("relationship, query_marker", [("USES", "RETURN s, r, t"), ("LED_TO", "RETURN i, r, issue")])
+@pytest.mark.parametrize("relationship, query_marker", [("USES", "USES"), ("LED_TO", "RETURN i, r, issue")])
 def test_latest_missing_path_warnings_survive_normalization(merged_database, monkeypatch, relationship, query_marker):
     client_class, _, _ = merged_database
     original = client_class.execute
     def missing_path(self, query, params):
-        if query_marker in query:
+        if (relationship == "USES" and ("RETURN s, r, t" in query or "[uses:USES]" in query)) or (
+                relationship != "USES" and query_marker in query):
             return SimpleNamespace(result_set=[])
         return original(self, query, params)
     monkeypatch.setattr(client_class, "execute", missing_path)
     trace = asyncio.run(AntonyGateway(Settings(graph_mode="falkordb")).trace_decision(TARGET))
     assert not any(e.type == relationship for e in trace.graph.edges)
-    assert len([w for w in trace.warnings if f"Missing {relationship} relationship" in w]) == 1
+    if relationship == "USES":
+        assert len([w for w in trace.warnings if "Missing USES relationship" in w]) == 1
+    else:
+        assert any("No incident-to-issue relationship" in warning for warning in trace.warnings)
+
+
+def test_normalize_trace_rejects_missing_or_disconnected_ordered_path(merged_database):
+    client_class, _, _ = merged_database
+    payload = trace_decision(client_class(graph_name="novapay"), include_relationship_paths=True)
+    payload["data"]["relationship_paths"] = [{
+        "id": "fabricated",
+        "steps": [{
+            "source": "issue:PAY-42", "type": "DISCUSSED_IN",
+            "target": "message:payment-perf-7",
+        }],
+    }]
+    with pytest.raises(GraphContractError):
+        normalize_trace(payload)
+
+
+def test_missing_implementation_evidence_does_not_fabricate_architecture_path(merged_database, monkeypatch):
+    client_class, _, _ = merged_database
+    original = client_class.execute
+
+    def incomplete_path(self, query, params):
+        if "RETURN d, implemented, commit, changes" in query:
+            return SimpleNamespace(result_set=[])
+        return original(self, query, params)
+
+    monkeypatch.setattr(client_class, "execute", incomplete_path)
+    trace = asyncio.run(AntonyGateway(Settings(graph_mode="falkordb")).trace_decision(TARGET))
+    assert "decision_to_current_architecture" not in {
+        path.id for path in trace.relationship_paths
+    }
+
+
+def test_ordered_trace_paths_map_to_context_builder_v2_edge_ids(merged_database):
+    gateway = AntonyGateway(Settings(graph_mode="falkordb"))
+    trace = asyncio.run(gateway.trace_decision(TARGET))
+    sources = asyncio.run(gateway.find_sources(trace.source_ids))
+    combined = merge_contexts([_trace(trace, sources, TARGET)])
+    expected = tuple(
+        tuple(f"{step.source}|{step.type}|{step.target}" for step in path.steps)
+        for path in trace.relationship_paths
+    )
+    assert combined.per_tool["decision_trace"].relationship_paths == expected
 
 
 def test_latest_missing_provenance_warning_is_not_discarded(merged_database, monkeypatch):

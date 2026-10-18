@@ -8,15 +8,16 @@ from fastapi.responses import JSONResponse
 
 from .config import Settings
 from .context import build_context
+from .change_intelligence import analyze_change
 from .context_v2 import CombinedContext
 from .graph import FalkorGateway, GraphContractError, GraphGateway, GraphUnavailable, create_gateway
 from .llm import LLMProvider, create_provider
 from .impact import build_impact_context
 from .experts import build_expert_context
 from .freshness import build_freshness_context
-from .models import ExpertInput, ExpertResponse, FreshnessInput, FreshnessResponse, HealthResponse, ImpactInput, ImpactResponse, Metadata, QueryRequest, QueryResponse
+from .models import ChangeInput, ChangeResponse, ExpertInput, ExpertResponse, FreshnessInput, FreshnessResponse, HealthResponse, ImpactInput, ImpactResponse, Metadata, QueryRequest, QueryResponse
 from .orchestration import TOOL_REGISTRY, execute_plan
-from .router import plan_question, route_question
+from .router import is_change_question, plan_question, route_question
 from .synthesis import single_tool_context
 
 
@@ -37,6 +38,8 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request, _error):
+        if _request.url.path == "/api/change-intelligence":
+            return error_response("INVALID_REQUEST", "Enter a nonblank target of 1–256 characters and proposed change of 1–2,000 characters.", 422)
         if _request.url.path == "/api/tools/freshness":
             return error_response("INVALID_REQUEST", "Enter an exact entity name or canonical ID of 1–256 characters.", 422)
         if _request.url.path == "/api/tools/expert-finder":
@@ -167,8 +170,23 @@ def create_app(settings: Settings | None = None, gateway: GraphGateway | None = 
     async def freshness(request: FreshnessInput):
         return await run_freshness(request)
 
+    async def run_change(request: ChangeInput | str):
+        async def select(packet):
+            # Providers without the finite Change protocol fail closed. The old
+            # Phase 2 generate interface is intentionally unchanged.
+            return await llm.select_change(packet)
+        return await analyze_change(request, graph, config.graph_mode,
+                                    select_presentation=select if config.llm_provider == "openrouter" else None)
+
+    @app.post("/api/change-intelligence", response_model=ChangeResponse)
+    async def change_intelligence(request: ChangeInput):
+        return await run_change(request)
+
     @app.post("/api/query", response_model=QueryResponse)
     async def query(request: QueryRequest):
+        if is_change_question(request.question):
+            response = await run_change(request.question)
+            return QueryResponse.model_validate(response.model_dump(exclude={"data"}))
         start = time.perf_counter()
         metadata = Metadata(latency_ms=0, graph_mode=config.graph_mode)
         plan = plan_question(request.question)

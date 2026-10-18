@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from .graph import GraphContractError
-from .models import EvidenceGraph, GraphNode, Source, SupportStatus, TraceInput, TraceResult
+from .models import EvidenceGraph, GraphNode, Source, SupportStatus, TraceInput, TraceRelationshipPath, TraceResult
 
 
 def safe_url(url: str | None) -> str | None:
@@ -72,6 +72,29 @@ def _retrieved_chunk_path(source: Source, parent: GraphNode, nodes: dict[str, Gr
     return excerpt[:1600] == source.snippet
 
 
+def validate_trace_paths(paths: list[TraceRelationshipPath], graph: EvidenceGraph) -> list[TraceRelationshipPath]:
+    """Validate/copy the supplied order against this tool's original directed graph.
+
+    Never repair, filter or construct paths from the union of sibling evidence.
+    Revalidate model dumps so mutated Pydantic instances cannot bypass checks.
+    """
+    try:
+        clean = [TraceRelationshipPath.model_validate(path.model_dump()) for path in paths]
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise GraphContractError("Invalid ordered Decision Trace path") from exc
+    if len(clean) > 80 or len({p.id for p in clean}) != len(clean):
+        raise GraphContractError("Invalid bounded ordered Decision Trace path set")
+    nodes = {n.id for n in graph.nodes}
+    edges = {(e.source, e.type, e.target) for e in graph.edges}
+    for path in clean:
+        if any(s.source not in nodes or s.target not in nodes or (s.source, s.type, s.target) not in edges
+               for s in path.steps):
+            raise GraphContractError("Ordered trace path contains an unreturned relationship")
+        if any(a.target != b.source for a, b in zip(path.steps, path.steps[1:])):
+            raise GraphContractError("Ordered trace path is not directed and contiguous")
+    return clean
+
+
 def build_context(trace: TraceResult, records: list[Source], query: TraceInput) -> EvidenceContext:
     # Bounded contract prevents accidental delivery of a whole-company graph.
     if len(trace.graph.nodes) > 30 or len(trace.graph.edges) > 80:
@@ -89,6 +112,7 @@ def build_context(trace: TraceResult, records: list[Source], query: TraceInput) 
             raise GraphContractError("Conflicting relationship ID")
         edges[edge.id] = edge
     graph = EvidenceGraph(nodes=list(nodes.values()), edges=list(edges.values()))
+    validate_trace_paths(trace.relationship_paths, graph)
     sources: dict[str, Source] = {}
     for source in records:
         linked = source.id in nodes or any(i in nodes for i in source.entity_ids)

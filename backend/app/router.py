@@ -61,6 +61,18 @@ def route_question(question: str) -> TraceInput | ImpactInput | None:
     return None
 
 
+def is_change_question(question: str) -> bool:
+    """Select the higher-level workflow, including qualified unsupported proposals.
+
+    Phase 2's 'what would be affected if Redis were removed' remains Impact.
+    Only explicit proposal grammars take precedence over the existing planner.
+    """
+    return bool(re.search(
+        r"^\s*(?:what (?:happens|would happen) if\b|if we (?:remove|replace)\b|"
+        r"(?:please |can we |should we )?(?:remove|replace|migrate|deprecate|switch from|move away from|upgrade)\b)",
+        question, re.I))
+
+
 @dataclass(frozen=True)
 class ToolCall:
     name: str
@@ -128,6 +140,7 @@ def _freshness_intent(clause: str) -> FreshnessInput | None:
     patterns = (
         r"(?:is|are) (?:the )?(.+?) (?:documentation|documents|docs) (?:stale|outdated|up.to.date|still current)",
         r"which (?:documents|docs) (?:about|for) (.+?) need review",
+        r"which (.+?) (?:documents|docs) need review",
         r"(?:check |show )?(?:knowledge )?freshness (?:for|of) (.+)",
     )
     for pattern in patterns:

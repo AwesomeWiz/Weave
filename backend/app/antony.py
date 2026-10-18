@@ -4,6 +4,7 @@ import asyncio
 from pydantic import ValidationError
 
 from .config import Settings
+from .context import validate_trace_paths
 from .graph import GraphContractError
 from .models import ExpertInput, ExpertResult, FreshnessInput, FreshnessResult, ImpactInput, ImpactResult, TraceInput, TraceResult
 
@@ -38,7 +39,7 @@ def normalize_trace(payload: dict) -> TraceResult:
         if not isinstance(data, dict) or not isinstance(sources, list):
             raise ValueError("Invalid trace envelope")
         if decision is None:
-            if nodes or edges or sources:
+            if nodes or edges or sources or data.get("relationship_paths"):
                 raise ValueError("Evidence without a selected decision")
             return TraceResult(warnings=payload.get("warnings") or [
                 "No decision found for the requested service and technology."])
@@ -52,9 +53,11 @@ def normalize_trace(payload: dict) -> TraceResult:
                 raise ValueError("Invalid canonical source ID")
             if source_id not in source_ids:
                 source_ids.append(source_id)
+        relationship_paths = data.get("relationship_paths", [])
         trace = TraceResult.model_validate({
             "graph": {"nodes": nodes, "edges": edges},
             "source_ids": source_ids, "decision_ids": [decision_id],
+            "relationship_paths": relationship_paths,
             "warnings": payload.get("warnings", []),
         })
         selected = next((n for n in trace.graph.nodes if n.id == decision_id and n.type == "Decision"), None)
@@ -65,6 +68,7 @@ def normalize_trace(payload: dict) -> TraceResult:
         if (not any(e.type == "USES" for e in trace.graph.edges)
                 and not any("USES" in warning for warning in trace.warnings)):
             trace.warnings.append("The trace tool did not return a Service USES Technology relationship.")
+        trace.relationship_paths = validate_trace_paths(trace.relationship_paths, trace.graph)
         return trace
     except (KeyError, TypeError, ValueError, ValidationError) as exc:
         raise GraphContractError("Invalid teammate decision trace") from exc
@@ -109,7 +113,12 @@ class AntonyGateway:
         def retrieve():
             client = self._client()
             try:
-                return trace_decision(client, service_id=service_id, technology_id=technology_id)
+                return trace_decision(
+                    client,
+                    service_id=service_id,
+                    technology_id=technology_id,
+                    include_relationship_paths=True,
+                )
             finally:
                 client.close()
         return normalize_trace(await asyncio.to_thread(retrieve))

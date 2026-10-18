@@ -7,6 +7,8 @@ def trace_decision(
     client: GraphClient,
     service_id: str = "service:payment-service",
     technology_id: str = "tech:redis",
+    *,
+    include_relationship_paths: bool = False,
 ) -> dict[str, Any]:
     """
     Trace an accepted decision connecting a service to a technology.
@@ -164,22 +166,18 @@ def trace_decision(
             f"Missing USES relationship from {service_id} to {technology_id}."
         )
 
-    # Incident INC-17 -> Issue PAY-42.
-    # Preserve this as a real persisted edge, not an inferred relationship.
-    incident_id = "incident:INC-17"
-    issue_id = "issue:PAY-42"
-
+    # Incidents are only relevant when they lead to an Issue that the selected
+    # decision actually supports.  This deliberately does not name a fixture
+    # incident or issue: every returned edge is discovered from the decision.
     incident_result = client.execute(
         """
-        MATCH (i:Incident {id: $incident_id})
-              -[r:LED_TO]->
-              (issue:Issue {id: $issue_id})
+        MATCH (d:Decision {id: $decision_id})-[:SUPPORTED_BY]->(issue:Issue)
+        MATCH (i:Incident)-[r:LED_TO]->(issue)
         RETURN i, r, issue
+        ORDER BY i.id, issue.id
+        LIMIT 20
         """,
-        {
-            "incident_id": incident_id,
-            "issue_id": issue_id,
-        },
+        {"decision_id": decision_id},
     )
 
     if incident_result.result_set:
@@ -207,7 +205,8 @@ def trace_decision(
             )
     else:
         warnings.append(
-            f"Missing LED_TO relationship from {incident_id} to {issue_id}."
+            "No incident-to-issue relationship was returned for the selected "
+            "decision's supporting issues."
         )
 
     # ------------------------------------------------------------------
@@ -273,6 +272,99 @@ def trace_decision(
                 "properties": properties,
             }
         )
+
+    # The decision's implementation can establish the current architecture
+    # only when all three directed relationships are present.  Query the
+    # complete bounded path, rather than connecting individually returned
+    # nodes in application code.
+    implementation_path_result = client.execute(
+        """
+        MATCH (d:Decision {id: $decision_id})-[implemented:IMPLEMENTED_BY]->
+              (commit:Commit)-[changes:CHANGES]->
+              (service:Service {id: $service_id})-[uses:USES]->
+              (technology:Technology {id: $technology_id})
+        RETURN d, implemented, commit, changes, service, uses, technology
+        ORDER BY commit.id
+        LIMIT 20
+        """,
+        {
+            "decision_id": decision_id,
+            "service_id": service_id,
+            "technology_id": technology_id,
+        },
+    )
+
+    implementation_path_edges: list[list[dict[str, str]]] = []
+    for (
+        path_decision,
+        implemented_relationship,
+        commit_node,
+        changes_relationship,
+        path_service,
+        uses_relationship,
+        path_technology,
+    ) in implementation_path_result.result_set:
+        path_nodes = (
+            (path_decision, "Decision"),
+            (commit_node, "Commit"),
+            (path_service, "Service"),
+            (path_technology, "Technology"),
+        )
+        valid_nodes = []
+        for path_node, fallback_type in path_nodes:
+            properties = node_properties(path_node)
+            node_id = properties.get("id")
+            if not node_id:
+                valid_nodes = []
+                break
+            valid_nodes.append((node_id, fallback_type, properties))
+            nodes.append(
+                {
+                    "id": node_id,
+                    "type": node_type(path_node),
+                    "label": properties.get(
+                        "title", properties.get("name", node_id)
+                    ),
+                    "properties": properties,
+                }
+            )
+        if not valid_nodes:
+            warnings.append(
+                "An implementation path was returned with a node lacking a canonical ID."
+            )
+            continue
+
+        path_steps = []
+        for source, relationship, target in (
+            (path_decision, implemented_relationship, commit_node),
+            (commit_node, changes_relationship, path_service),
+            (path_service, uses_relationship, path_technology),
+        ):
+            source_id = node_properties(source)["id"]
+            target_id = node_properties(target)["id"]
+            relationship_type = (
+                getattr(relationship, "relation", None)
+                or getattr(relationship, "type", None)
+            )
+            if not relationship_type:
+                warnings.append(
+                    "An implementation path relationship had no returned type."
+                )
+                path_steps = []
+                break
+            edge = {
+                "id": f"{source_id}|{relationship_type}|{target_id}",
+                "source": source_id,
+                "target": target_id,
+                "type": relationship_type,
+                "properties": dict(relationship.properties),
+            }
+            edges.append(edge)
+            path_steps.append(
+                {"source": source_id, "type": relationship_type, "target": target_id}
+            )
+        if path_steps:
+            implementation_path_edges.append(path_steps)
 
     # ------------------------------------------------------------------
     # 5. Check rationale provenance against the retrieved source paths.
@@ -400,7 +492,7 @@ def trace_decision(
     )
     unique_edges.reverse()
 
-    return {
+    response = {
         "data": {
             "decision": decision,
             "decision_status": decision.get("status"),
@@ -423,3 +515,63 @@ def trace_decision(
         "edges": unique_edges,
         "warnings": warnings,
     }
+    if include_relationship_paths:
+        node_ids = {node["id"] for node in unique_nodes if node.get("id")}
+        edge_signatures = {
+            (edge["source"], edge["type"], edge["target"])
+            for edge in unique_edges
+        }
+
+        def verified_path(path_id: str, steps: list[dict[str, str]]):
+            """Return an ordered path only when every returned edge is real."""
+            if not steps or any(
+                step["source"] not in node_ids
+                or step["target"] not in node_ids
+                or
+                (step["source"], step["type"], step["target"])
+                not in edge_signatures
+                for step in steps
+            ):
+                return None
+            if any(
+                current["target"] != following["source"]
+                for current, following in zip(steps, steps[1:])
+            ):
+                return None
+            return {"id": path_id, "steps": steps}
+
+        ordered_paths = []
+        single_edge_paths = (
+            ("incident_to_investigation", "LED_TO", "incident:"),
+            ("decision_to_investigation", "SUPPORTED_BY", "issue:"),
+            ("decision_to_discussion", "SUPPORTED_BY", "message:"),
+            ("decision_to_documentation", "DOCUMENTED_IN", "doc:"),
+        )
+        for path_id, relationship_type, target_prefix in single_edge_paths:
+            matches = [
+                {"source": edge["source"], "type": edge["type"], "target": edge["target"]}
+                for edge in unique_edges
+                if edge["type"] == relationship_type
+                and (
+                    (path_id == "incident_to_investigation" and edge["source"].startswith(target_prefix))
+                    or (path_id != "incident_to_investigation" and edge["source"] == decision_id
+                        and edge["target"].startswith(target_prefix))
+                )
+            ]
+            for index, step in enumerate(matches):
+                path = verified_path(
+                    path_id if len(matches) == 1 else f"{path_id}:{index + 1}", [step]
+                )
+                if path:
+                    ordered_paths.append(path)
+        for index, steps in enumerate(implementation_path_edges):
+            path = verified_path(
+                "decision_to_current_architecture"
+                if len(implementation_path_edges) == 1
+                else f"decision_to_current_architecture:{index + 1}",
+                steps,
+            )
+            if path:
+                ordered_paths.append(path)
+        response["data"]["relationship_paths"] = ordered_paths
+    return response

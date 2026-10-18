@@ -223,6 +223,7 @@ def test_accepted_decision_without_rationale_path_stays_partial(database, http_b
     async def missing_path(query):
         trace = await original(query)
         trace.graph.edges = [e for e in trace.graph.edges if e.type != "SUPPORTED_BY"]
+        trace.relationship_paths = [p for p in trace.relationship_paths if not any(s.type == "SUPPORTED_BY" for s in p.steps)]
         return trace
     monkeypatch.setattr(gateway, "trace_decision", missing_path)
     baseline = TestClient(create_app(database[2], gateway=gateway)).post("/api/query", json={"question": TRACE}).json()

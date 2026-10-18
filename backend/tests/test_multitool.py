@@ -146,6 +146,7 @@ def test_invalid_tool_evidence_is_excluded_without_borrowing_connectivity(databa
         # Trace lacks USES, but Impact still has it. The merge must not repair
         # Trace's independent support status from the sibling graph.
         result.graph.edges = [e for e in result.graph.edges if e.type != "USES"]
+        result.relationship_paths = [p for p in result.relationship_paths if not any(s.type == "USES" for s in p.steps)]
         return result
     monkeypatch.setattr(gateway, "trace_decision", broken)
     context, _ = asyncio.run(execute_plan(plan_question(COMBINED), gateway))
