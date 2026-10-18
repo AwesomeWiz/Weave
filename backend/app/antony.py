@@ -52,9 +52,11 @@ def normalize_trace(payload: dict) -> TraceResult:
                 raise ValueError("Invalid canonical source ID")
             if source_id not in source_ids:
                 source_ids.append(source_id)
+        relationship_paths = data.get("relationship_paths", [])
         trace = TraceResult.model_validate({
             "graph": {"nodes": nodes, "edges": edges},
             "source_ids": source_ids, "decision_ids": [decision_id],
+            "relationship_paths": relationship_paths,
             "warnings": payload.get("warnings", []),
         })
         selected = next((n for n in trace.graph.nodes if n.id == decision_id and n.type == "Decision"), None)
@@ -65,6 +67,24 @@ def normalize_trace(payload: dict) -> TraceResult:
         if (not any(e.type == "USES" for e in trace.graph.edges)
                 and not any("USES" in warning for warning in trace.warnings)):
             trace.warnings.append("The trace tool did not return a Service USES Technology relationship.")
+        graph_node_ids = {node.id for node in trace.graph.nodes}
+        graph_edges = {
+            (edge.source, edge.type, edge.target)
+            for edge in trace.graph.edges
+        }
+        for path in trace.relationship_paths:
+            if any(
+                step.source not in graph_node_ids
+                or step.target not in graph_node_ids
+                or (step.source, step.type, step.target) not in graph_edges
+                for step in path.steps
+            ):
+                raise ValueError("Ordered trace path contains an unreturned relationship")
+            if any(
+                current.target != following.source
+                for current, following in zip(path.steps, path.steps[1:])
+            ):
+                raise ValueError("Ordered trace path is not directed and contiguous")
         return trace
     except (KeyError, TypeError, ValueError, ValidationError) as exc:
         raise GraphContractError("Invalid teammate decision trace") from exc
@@ -109,7 +129,12 @@ class AntonyGateway:
         def retrieve():
             client = self._client()
             try:
-                return trace_decision(client, service_id=service_id, technology_id=technology_id)
+                return trace_decision(
+                    client,
+                    service_id=service_id,
+                    technology_id=technology_id,
+                    include_relationship_paths=True,
+                )
             finally:
                 client.close()
         return normalize_trace(await asyncio.to_thread(retrieve))

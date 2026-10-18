@@ -29,8 +29,17 @@ class ToolSpec:
 
 def _trace(result, records, arguments):
     context = build_context(result, records, arguments)
+    edge_ids = {
+        (edge.source, edge.type, edge.target): edge.id
+        for edge in context.graph.edges
+    }
+    paths = tuple(
+        tuple(edge_ids[(step.source, step.type, step.target)] for step in path.steps)
+        for path in result.relationship_paths
+        if all((step.source, step.type, step.target) in edge_ids for step in path.steps)
+    ) or tuple((edge.id,) for edge in context.graph.edges)
     return ToolEvidence("decision_trace", "Decision Trace", "trace_decision", context,
-                        tuple((e.id,) for e in context.graph.edges))
+                        paths)
 
 
 def _impact(result, records, arguments):

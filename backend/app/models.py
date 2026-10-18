@@ -54,11 +54,25 @@ class TraceInput(BaseModel):
     technology: str
 
 
+class TracePathStep(BaseModel):
+    """One stored directed relationship in an ordered Decision Trace path."""
+    source: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+
+
+class TraceRelationshipPath(BaseModel):
+    """A named, ordered path returned by the graph trace tool."""
+    id: str = Field(min_length=1)
+    steps: list[TracePathStep] = Field(min_length=1, max_length=10)
+
+
 class TraceResult(BaseModel):
     """Team integration contract; source IDs are resolved independently."""
     graph: EvidenceGraph = Field(default_factory=EvidenceGraph)
     source_ids: list[str] = Field(default_factory=list)
     decision_ids: list[str] = Field(default_factory=list)
+    relationship_paths: list[TraceRelationshipPath] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
